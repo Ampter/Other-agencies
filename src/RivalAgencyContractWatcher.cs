@@ -25,16 +25,17 @@ namespace OtherAgencies
     [KSPAddon(KSPAddon.Startup.SpaceCentre, false)]
     public sealed class RivalAgencyContractWatcher : MonoBehaviour
     {
-        private const double CheckIntervalSeconds = 5d;
-        private const double NearExpiryThresholdSeconds = 2d * 24d * 60d * 60d;
-        private const double OfferAgeThresholdSeconds = 4d * 24d * 60d * 60d;
-
         private const double KerbinDaySeconds = 6d * 60d * 60d;
         private const double KerbinYearSeconds = 426d * KerbinDaySeconds;
         private const double LateGameStartSeconds = 3d * KerbinYearSeconds;
         private const double EndGameStartSeconds = 6d * KerbinYearSeconds;
+        private const double CheckIntervalSeconds = 5d;
+        private const double NearExpiryThresholdSeconds = 0.5d * KerbinDaySeconds;
+        private const double OfferAgeThresholdSeconds = 3d * KerbinDaySeconds;
+        private const string LogPrefix = "[OtherAgencies]";
 
         private readonly List<Agency> agencies = new List<Agency>();
+        private readonly HashSet<Guid> attemptedContracts = new HashSet<Guid>();
         private double nextCheckTime;
 
         private void Start()
@@ -102,6 +103,7 @@ namespace OtherAgencies
                 "SpeedRun Aerospace sniped the deadline before your launch window."));
 
             nextCheckTime = Planetarium.GetUniversalTime() + CheckIntervalSeconds;
+            Debug.Log($"{LogPrefix} initialized with {agencies.Count} agencies.");
         }
 
         private void FixedUpdate()
@@ -127,21 +129,41 @@ namespace OtherAgencies
                 .Where(contract => contract != null && contract.ContractState == Contract.State.Offered)
                 .ToList();
 
+            Debug.Log($"{LogPrefix} evaluation tick at UT={now:0.0}, offered={offeredContracts.Count}.");
+
             if (offeredContracts.Count == 0)
             {
+                attemptedContracts.Clear();
                 return;
             }
 
+            HashSet<Guid> offeredIds = new HashSet<Guid>(offeredContracts.Select(contract => contract.ContractGuid));
+            attemptedContracts.RemoveWhere(id => !offeredIds.Contains(id));
+
             foreach (Contract contract in offeredContracts)
             {
-                if (!ShouldEvaluateContract(contract, now))
+                bool nearExpiry = IsNearExpiry(contract, now);
+                bool exceededOfferAge = HasExceededOfferAge(contract, now);
+
+                if (!nearExpiry && !exceededOfferAge)
                 {
+                    Debug.Log($"{LogPrefix} skip '{contract.Title}': not near expiry and offer age below threshold.");
                     continue;
                 }
+
+                if (attemptedContracts.Contains(contract.ContractGuid))
+                {
+                    Debug.Log($"{LogPrefix} skip '{contract.Title}': takeover roll already attempted for this offer instance.");
+                    continue;
+                }
+
+                Debug.Log($"{LogPrefix} evaluating '{contract.Title}': nearExpiry={nearExpiry}, exceededOfferAge={exceededOfferAge}.");
+                attemptedContracts.Add(contract.ContractGuid);
 
                 Agency winner = SelectWinningAgency(contract);
                 if (winner == null)
                 {
+                    Debug.Log($"{LogPrefix} no agency won takeover roll for '{contract.Title}'.");
                     continue;
                 }
 
@@ -149,24 +171,26 @@ namespace OtherAgencies
             }
         }
 
-        private static bool ShouldEvaluateContract(Contract contract, double now)
+        private static bool IsNearExpiry(Contract contract, double now)
         {
-            if (contract == null)
+            if (contract.DateExpire <= 0d)
             {
                 return false;
             }
 
-            return IsNearExpiry(contract, now) || HasExceededOfferAge(contract, now);
-        }
-
-        private static bool IsNearExpiry(Contract contract, double now)
-        {
-            return (contract.DateExpire - now) <= NearExpiryThresholdSeconds;
+            double remaining = contract.DateExpire - now;
+            return remaining > 0d && remaining <= NearExpiryThresholdSeconds;
         }
 
         private static bool HasExceededOfferAge(Contract contract, double now)
         {
-            return contract.DateAccepted > 0 && (now - contract.DateAccepted) >= OfferAgeThresholdSeconds;
+            if (contract.TimeExpiry <= 0d || contract.DateExpire <= 0d)
+            {
+                return false;
+            }
+
+            double offeredAt = contract.DateExpire - contract.TimeExpiry;
+            return (now - offeredAt) >= OfferAgeThresholdSeconds;
         }
 
         private Agency SelectWinningAgency(Contract contract)
@@ -178,16 +202,22 @@ namespace OtherAgencies
 
             if (matchingAgencies.Count == 0)
             {
+                Debug.Log($"{LogPrefix} no matching agencies for '{contract.Title}'.");
                 return null;
             }
+
+            Debug.Log($"{LogPrefix} '{contract.Title}' matched {matchingAgencies.Count} agencies.");
 
             foreach (Agency agency in matchingAgencies)
             {
                 float relevance = GetContractRelevance(contract, agency);
-                float chance = Mathf.Clamp(agency.Aggression * relevance, 0.20f, 0.50f);
+                float chance = Mathf.Clamp(agency.Aggression * relevance, 0.08f, 0.30f);
+                float roll = UnityEngine.Random.value;
+                Debug.Log($"{LogPrefix} roll '{contract.Title}' vs {agency.Name}: chance={chance:0.00}, roll={roll:0.00}.");
 
-                if (UnityEngine.Random.value <= chance)
+                if (roll <= chance)
                 {
+                    Debug.Log($"{LogPrefix} winner for '{contract.Title}' is {agency.Name}.");
                     return agency;
                 }
             }
@@ -202,15 +232,33 @@ namespace OtherAgencies
 
         private static void ExpireContract(Contract contract, Agency winner)
         {
-            contract.Withdraw();
+            if (!TryRemoveOfferedContract(contract))
+            {
+                Debug.LogWarning($"{LogPrefix} failed to decline contract '{contract?.Title ?? "<null>"}'; skipping takeover.");
+                return;
+            }
 
             string contractMessage = $"{winner.Name} completed: {contract.Title}";
             ScreenMessages.PostScreenMessage(contractMessage, 6f, ScreenMessageStyle.UPPER_CENTER);
+            Debug.Log($"{LogPrefix} {winner.Name} took '{contract.Title}'. State is now {contract.ContractState}.");
 
             if (!string.IsNullOrEmpty(winner.CompletionFlavor))
             {
                 ScreenMessages.PostScreenMessage(winner.CompletionFlavor, 6f, ScreenMessageStyle.UPPER_CENTER);
             }
+        }
+
+        private static bool TryRemoveOfferedContract(Contract contract)
+        {
+            if (contract == null || contract.ContractState != Contract.State.Offered)
+            {
+                return false;
+            }
+
+            bool declined = contract.Decline();
+            bool removed = contract.ContractState != Contract.State.Offered;
+            Debug.Log($"{LogPrefix} decline result for '{contract.Title}': declined={declined}, state={contract.ContractState}.");
+            return removed || declined;
         }
 
         private static bool IsLaunchAndOrbitContract(Contract contract)

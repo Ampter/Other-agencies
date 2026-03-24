@@ -21,12 +21,25 @@ namespace Contracts
         }
 
         public State ContractState { get; private set; } = State.Offered;
+        public Guid ContractGuid { get; } = Guid.NewGuid();
         public double DateExpire { get; set; }
         public double DateAccepted { get; set; }
+        public double TimeExpiry { get; set; }
         public string Title { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
 
+        public bool Decline()
+        {
+            ContractState = State.Declined;
+            return true;
+        }
+
         public void Withdraw()
+        {
+            ContractState = State.Withdrawn;
+        }
+
+        public void Kill()
         {
             ContractState = State.Withdrawn;
         }
@@ -76,6 +89,17 @@ namespace UnityEngine
         private static readonly System.Random rng = new System.Random();
 
         public static float value => (float)rng.NextDouble();
+    }
+
+    public static class Debug
+    {
+        public static void Log(string message)
+        {
+        }
+
+        public static void LogWarning(string message)
+        {
+        }
     }
 
     public enum ScreenMessageStyle
