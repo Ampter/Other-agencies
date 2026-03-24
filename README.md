@@ -71,21 +71,6 @@ A lightweight KSP mod mechanic where ignored offered contracts can expire becaus
     - Behavior: aggressively targets contracts closest to expiry
     - Funds/tech flavor: medium funds, variable tech, highly competitive
 
-## Recent changes 
-
-- Replaced invalid/non-public contract state usage with supported decline flow.
-- Added runtime `agencies.cfg` loading with fallback defaults.
-- Added configurable `SETTINGS` for:
-- check interval
-- near-expiry threshold
-- offer-age threshold
-- min/max takeover chance bounds
-- late-game and end-game unlock times
-- Added configurable `PREFERENCE` keyword overrides.
-- Reduced runtime logging to takeover events only.
-- Updated packaging so `create.sh` also ships `agencies.cfg` and creates `Other_agencies.zip`.
-- Added `put.sh` deploy helper to copy the packaged mod into KSP `GameData`.
-- Added and expanded `CONFIG.md` as the full configuration wiki.
 
 ## Design boundaries
 
