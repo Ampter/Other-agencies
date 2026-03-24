@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>OtherAgencies</AssemblyName>
+    <RootNamespace>OtherAgencies</RootNamespace>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Set this to your KSP installation path, e.g. C:\Games\KSP -->
+    <KspInstallDir Condition="'$(KspInstallDir)' == ''">$(KSP_INSTALL_DIR)</KspInstallDir>
+    <KspManagedDir Condition="'$(KspManagedDir)' == '' and '$(KspInstallDir)' != ''">$(KspInstallDir)/KSP_x64_Data/Managed</KspManagedDir>
+    <KspPluginsDir Condition="'$(KspPluginsDir)' == '' and '$(KspInstallDir)' != ''">$(KspInstallDir)/GameData</KspPluginsDir>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(KspManagedDir)' != ''">
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(KspManagedDir)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(KspManagedDir)/UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Contracts">
+      <HintPath>$(KspManagedDir)/Contracts.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="ShowKspReferenceHint" BeforeTargets="Build" Condition="'$(KspManagedDir)' == ''">
+    <Message Importance="High" Text="KspManagedDir is not set. Build will fail until KSP managed DLL paths are configured." />
+  </Target>
+</Project>

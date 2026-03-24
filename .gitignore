@@ -53,3 +53,17 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# --- Build Artifacts ---
+# Ignores the bin and obj folders inside /src
+src/bin/
+src/obj/
+
+# --- IDE & System ---
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln
+.DS_Store
+Thumbs.db
