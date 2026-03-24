@@ -1,0 +1,33 @@
+name: Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build package with create.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./create.sh
+          ./create.sh
+
+      - name: Verify packaged files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "Other_agencies/GameData/Other-Agencies/Plugins/OtherAgencies.dll"
+          test -f "Other_agencies/GameData/Other-Agencies/agencies.cfg"
