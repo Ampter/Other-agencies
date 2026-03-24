@@ -62,7 +62,7 @@ A lightweight KSP mod mechanic where ignored offered contracts can expire becaus
    - Funds/tech flavor: extremely high funds, endgame
 
 9. **Kerbin Logistics Network**
-   - Focus: rescue + crew transport contracts
+   - Focus: rescue 
    - Behavior: prefers stranded Kerbals/passenger logistics
    - Funds/tech flavor: medium funds, early-mid
 
