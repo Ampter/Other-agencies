@@ -8,8 +8,6 @@ set -euo pipefail
 #       Other-Agencies/
 #         Plugins/OtherAgencies.dll
 #         agencies.cfg
-#         PluginData/
-#         Localization/
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_FILE="$SCRIPT_DIR/src/OtherAgencies.csproj"
@@ -42,6 +40,8 @@ if [[ ! -f "$OUTPUT_DLL" ]]; then
   echo "Build finished but output DLL not found: $OUTPUT_DLL" >&2
   exit 1
 fi
+
+
 
 echo "[2/4] Creating package folders..."
 mkdir -p "$PLUGINS_DIR" "$PLUGIN_DATA_DIR" "$LOCALIZATION_DIR"
