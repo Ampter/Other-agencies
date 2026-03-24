@@ -13,9 +13,15 @@
     <KspInstallDir Condition="'$(KspInstallDir)' == ''">$(KSP_INSTALL_DIR)</KspInstallDir>
     <KspManagedDir Condition="'$(KspManagedDir)' == '' and '$(KspInstallDir)' != ''">$(KspInstallDir)/KSP_x64_Data/Managed</KspManagedDir>
     <KspPluginsDir Condition="'$(KspPluginsDir)' == '' and '$(KspInstallDir)' != ''">$(KspInstallDir)/GameData</KspPluginsDir>
+    <HasKspManagedAssemblies Condition="'$(KspManagedDir)' != '' and Exists('$(KspManagedDir)/Assembly-CSharp.dll') and Exists('$(KspManagedDir)/UnityEngine.dll') and Exists('$(KspManagedDir)/Contracts.dll')">true</HasKspManagedAssemblies>
+    <HasKspManagedAssemblies Condition="'$(HasKspManagedAssemblies)' == ''">false</HasKspManagedAssemblies>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(KspManagedDir)' != ''">
+  <PropertyGroup Condition="'$(HasKspManagedAssemblies)' != 'true'">
+    <DefineConstants>$(DefineConstants);KSP_STUBS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(HasKspManagedAssemblies)' == 'true'">
     <Reference Include="Assembly-CSharp">
       <HintPath>$(KspManagedDir)/Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
@@ -30,7 +36,7 @@
     </Reference>
   </ItemGroup>
 
-  <Target Name="ShowKspReferenceHint" BeforeTargets="Build" Condition="'$(KspManagedDir)' == ''">
-    <Message Importance="High" Text="KspManagedDir is not set. Build will fail until KSP managed DLL paths are configured." />
+  <Target Name="ShowKspReferenceHint" BeforeTargets="Build" Condition="'$(HasKspManagedAssemblies)' != 'true'">
+    <Message Importance="High" Text="KSP managed DLLs not found. Building with local KSP stubs; set KspManagedDir (or KSP_INSTALL_DIR) to build against game assemblies." />
   </Target>
 </Project>
