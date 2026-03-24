@@ -29,30 +29,65 @@ namespace OtherAgencies
     {
         private const double KerbinDaySeconds = 6d * 60d * 60d;
         private const double KerbinYearSeconds = 426d * KerbinDaySeconds;
-        private const double LateGameStartSeconds = 3d * KerbinYearSeconds;
-        private const double EndGameStartSeconds = 6d * KerbinYearSeconds;
-        private const double CheckIntervalSeconds = 5d;
-        private const double NearExpiryThresholdSeconds = 0.5d * KerbinDaySeconds;
-        private const double OfferAgeThresholdSeconds = 3d * KerbinDaySeconds;
+        private const double DefaultCheckIntervalSeconds = 5d;
+        private const double DefaultNearExpiryThresholdKerbinDays = 0.5d;
+        private const double DefaultOfferAgeThresholdKerbinDays = 3d;
+        private const float DefaultMinTakeoverChance = 0.08f;
+        private const float DefaultMaxTakeoverChance = 0.30f;
+        private const double DefaultLateGameStartKerbinYears = 3d;
+        private const double DefaultEndGameStartKerbinYears = 6d;
         private const string LogPrefix = "[OtherAgencies]";
         private const string ConfigFileName = "agencies.cfg";
         private const string ConfigRootNodeName = "OTHER_AGENCIES";
         private const string AgencyNodeName = "AGENCY";
+        private const string SettingsNodeName = "SETTINGS";
+        private const string PreferenceNodeName = "PREFERENCE";
 
         private readonly List<Agency> agencies = new List<Agency>();
         private readonly Dictionary<string, Func<Contract, bool>> preferenceMap =
             new Dictionary<string, Func<Contract, bool>>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string[]> preferenceKeywords =
+            new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<Guid> attemptedContracts = new HashSet<Guid>();
+        private double checkIntervalSeconds;
+        private double nearExpiryThresholdSeconds;
+        private double offerAgeThresholdSeconds;
+        private float minTakeoverChance;
+        private float maxTakeoverChance;
+        private double lateGameStartSeconds;
+        private double endGameStartSeconds;
         private double nextCheckTime;
 
         private void Start()
         {
-            agencies.Clear();
+            ResetConfigToDefaults();
             RegisterBuiltInPreferences();
             LoadAgenciesConfigOrDefault();
 
-            nextCheckTime = Planetarium.GetUniversalTime() + CheckIntervalSeconds;
-            Debug.Log($"{LogPrefix} initialized with {agencies.Count} agencies.");
+            nextCheckTime = Planetarium.GetUniversalTime() + checkIntervalSeconds;
+        }
+
+        private void ResetConfigToDefaults()
+        {
+            checkIntervalSeconds = DefaultCheckIntervalSeconds;
+            nearExpiryThresholdSeconds = DefaultNearExpiryThresholdKerbinDays * KerbinDaySeconds;
+            offerAgeThresholdSeconds = DefaultOfferAgeThresholdKerbinDays * KerbinDaySeconds;
+            minTakeoverChance = DefaultMinTakeoverChance;
+            maxTakeoverChance = DefaultMaxTakeoverChance;
+            lateGameStartSeconds = DefaultLateGameStartKerbinYears * KerbinYearSeconds;
+            endGameStartSeconds = DefaultEndGameStartKerbinYears * KerbinYearSeconds;
+
+            preferenceKeywords.Clear();
+            preferenceKeywords["launch_orbit"] = new[] { "launch", "orbit", "sub-orbital", "satellite", "first launch" };
+            preferenceKeywords["satellite_comms"] = new[] { "satellite", "relay", "antenna", "comms", "commnet" };
+            preferenceKeywords["mun_minmus"] = new[] { "mun", "minmus" };
+            preferenceKeywords["duna_late_game"] = new[] { "duna", "interplanetary", "transfer window" };
+            preferenceKeywords["science"] = new[] { "science", "experiment", "temperature", "crew report", "goo", "materials bay" };
+            preferenceKeywords["part_test"] = new[] { "test", "engine", "part", "altitude", "activate" };
+            preferenceKeywords["exploration"] = new[] { "explore", "flyby", "first", "discover", "reach" };
+            preferenceKeywords["outer_planets_end_game"] = new[] { "jool", "eeloo", "outer", "tylo", "vall", "bop", "pol" };
+            preferenceKeywords["rescue_transport"] = new[] { "rescue", "passenger", "tourist", "crew", "transport" };
+            preferenceKeywords["urgent"] = Array.Empty<string>();
         }
 
         private void RegisterBuiltInPreferences()
@@ -77,7 +112,6 @@ namespace OtherAgencies
             string configPath = ResolveAgencyConfigPath();
             if (string.IsNullOrEmpty(configPath) || !File.Exists(configPath))
             {
-                Debug.LogWarning($"{LogPrefix} agencies.cfg not found, using built-in defaults.");
                 LoadDefaultAgencies();
                 return;
             }
@@ -85,16 +119,17 @@ namespace OtherAgencies
             ConfigNode root = ConfigNode.Load(configPath);
             if (root == null)
             {
-                Debug.LogWarning($"{LogPrefix} could not parse agencies.cfg at '{configPath}', using built-in defaults.");
                 LoadDefaultAgencies();
                 return;
             }
 
             ConfigNode config = root.HasNode(ConfigRootNodeName) ? root.GetNode(ConfigRootNodeName) : root;
+            ApplySettings(config);
+            ApplyPreferenceOverrides(config);
+
             ConfigNode[] agencyNodes = config.GetNodes(AgencyNodeName);
             if (agencyNodes == null || agencyNodes.Length == 0)
             {
-                Debug.LogWarning($"{LogPrefix} no AGENCY nodes in agencies.cfg, using built-in defaults.");
                 LoadDefaultAgencies();
                 return;
             }
@@ -106,12 +141,150 @@ namespace OtherAgencies
 
             if (agencies.Count == 0)
             {
-                Debug.LogWarning($"{LogPrefix} agencies.cfg loaded zero valid agencies, using built-in defaults.");
                 LoadDefaultAgencies();
                 return;
             }
+        }
 
-            Debug.Log($"{LogPrefix} loaded {agencies.Count} agencies from '{configPath}'.");
+        private void ApplySettings(ConfigNode config)
+        {
+            if (config == null || !config.HasNode(SettingsNodeName))
+            {
+                return;
+            }
+
+            ConfigNode settings = config.GetNode(SettingsNodeName);
+            if (settings == null)
+            {
+                return;
+            }
+
+            checkIntervalSeconds = ReadDouble(settings, "checkIntervalSeconds", checkIntervalSeconds, 0.2d, 300d);
+
+            double nearExpiryThresholdKerbinDays = ReadDouble(
+                settings,
+                "nearExpiryThresholdKerbinDays",
+                nearExpiryThresholdSeconds / KerbinDaySeconds,
+                0d,
+                1000d);
+            nearExpiryThresholdSeconds = nearExpiryThresholdKerbinDays * KerbinDaySeconds;
+
+            double offerAgeThresholdKerbinDays = ReadDouble(
+                settings,
+                "offerAgeThresholdKerbinDays",
+                offerAgeThresholdSeconds / KerbinDaySeconds,
+                0d,
+                1000d);
+            offerAgeThresholdSeconds = offerAgeThresholdKerbinDays * KerbinDaySeconds;
+
+            minTakeoverChance = ReadFloat(settings, "minTakeoverChance", minTakeoverChance, 0f, 1f);
+            maxTakeoverChance = ReadFloat(settings, "maxTakeoverChance", maxTakeoverChance, 0f, 1f);
+            if (maxTakeoverChance < minTakeoverChance)
+            {
+                float swap = minTakeoverChance;
+                minTakeoverChance = maxTakeoverChance;
+                maxTakeoverChance = swap;
+            }
+
+            double lateGameStartKerbinYears = ReadDouble(
+                settings,
+                "lateGameStartKerbinYears",
+                lateGameStartSeconds / KerbinYearSeconds,
+                0d,
+                1000d);
+            lateGameStartSeconds = lateGameStartKerbinYears * KerbinYearSeconds;
+
+            double endGameStartKerbinYears = ReadDouble(
+                settings,
+                "endGameStartKerbinYears",
+                endGameStartSeconds / KerbinYearSeconds,
+                0d,
+                1000d);
+            endGameStartSeconds = endGameStartKerbinYears * KerbinYearSeconds;
+        }
+
+        private void ApplyPreferenceOverrides(ConfigNode config)
+        {
+            if (config == null)
+            {
+                return;
+            }
+
+            ConfigNode[] nodes = config.GetNodes(PreferenceNodeName);
+            if (nodes == null || nodes.Length == 0)
+            {
+                return;
+            }
+
+            foreach (ConfigNode node in nodes)
+            {
+                if (node == null)
+                {
+                    continue;
+                }
+
+                string id = (node.GetValue("id") ?? string.Empty).Trim();
+                string keywordsRaw = node.GetValue("keywords") ?? string.Empty;
+                if (string.IsNullOrEmpty(id) || string.IsNullOrWhiteSpace(keywordsRaw))
+                {
+                    continue;
+                }
+
+                string[] keywords = SplitKeywords(keywordsRaw);
+                if (keywords.Length == 0)
+                {
+                    continue;
+                }
+
+                preferenceKeywords[id] = keywords;
+            }
+        }
+
+        private static string[] SplitKeywords(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return Array.Empty<string>();
+            }
+
+            return raw
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => value.Trim())
+                .Where(value => !string.IsNullOrEmpty(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        private static double ReadDouble(ConfigNode node, string key, double defaultValue, double min, double max)
+        {
+            if (node == null || string.IsNullOrEmpty(key))
+            {
+                return defaultValue;
+            }
+
+            string raw = node.GetValue(key);
+            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
+            {
+                return defaultValue;
+            }
+
+            return Math.Max(min, Math.Min(max, value));
+        }
+
+        private static float ReadFloat(ConfigNode node, string key, float defaultValue, float min, float max)
+        {
+            if (node == null || string.IsNullOrEmpty(key))
+            {
+                return defaultValue;
+            }
+
+            string raw = node.GetValue(key);
+            if (!float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out float value))
+            {
+                return defaultValue;
+            }
+
+            return Mathf.Clamp(value, min, max);
         }
 
         private static string ResolveAgencyConfigPath()
@@ -151,20 +324,17 @@ namespace OtherAgencies
 
             if (string.IsNullOrEmpty(name))
             {
-                Debug.LogWarning($"{LogPrefix} skipping AGENCY with missing 'name'.");
                 return;
             }
 
             if (!preferenceMap.TryGetValue(preferenceId, out Func<Contract, bool> preference))
             {
-                Debug.LogWarning($"{LogPrefix} skipping '{name}': unknown preference '{preferenceId}'.");
                 return;
             }
 
             if (!float.TryParse(aggressionRaw, NumberStyles.Float, CultureInfo.InvariantCulture, out float aggression))
             {
                 aggression = 0.35f;
-                Debug.LogWarning($"{LogPrefix} agency '{name}' has invalid aggression '{aggressionRaw}', using {aggression:0.00}.");
             }
 
             agencies.Add(new Agency(name, preference, aggression, completionFlavor));
@@ -182,7 +352,6 @@ namespace OtherAgencies
             AddAgency("Outer Planets Coalition", "outer_planets_end_game", 0.50f, "Outer Planets Coalition quietly secured this outer-system objective.");
             AddAgency("Kerbin Logistics Network", "rescue_transport", 0.34f, "Kerbin Logistics Network handled this crew operation before you.");
             AddAgency("SpeedRun Aerospace", "urgent", 0.46f, "SpeedRun Aerospace sniped the deadline before your launch window.");
-            Debug.Log($"{LogPrefix} loaded built-in default agencies.");
         }
 
         private void AddAgency(string name, string preferenceId, float aggression, string completionFlavor)
@@ -194,7 +363,6 @@ namespace OtherAgencies
 
             if (!preferenceMap.TryGetValue(preferenceId, out Func<Contract, bool> preference))
             {
-                Debug.LogWarning($"{LogPrefix} could not add agency '{name}' with unknown preference '{preferenceId}'.");
                 return;
             }
 
@@ -209,7 +377,7 @@ namespace OtherAgencies
                 return;
             }
 
-            nextCheckTime = now + CheckIntervalSeconds;
+            nextCheckTime = now + checkIntervalSeconds;
             EvaluateOfferedContracts(now);
         }
 
@@ -223,8 +391,6 @@ namespace OtherAgencies
             List<Contract> offeredContracts = ContractSystem.Instance.Contracts
                 .Where(contract => contract != null && contract.ContractState == Contract.State.Offered)
                 .ToList();
-
-            Debug.Log($"{LogPrefix} evaluation tick at UT={now:0.0}, offered={offeredContracts.Count}.");
 
             if (offeredContracts.Count == 0)
             {
@@ -242,23 +408,19 @@ namespace OtherAgencies
 
                 if (!nearExpiry && !exceededOfferAge)
                 {
-                    Debug.Log($"{LogPrefix} skip '{contract.Title}': not near expiry and offer age below threshold.");
                     continue;
                 }
 
                 if (attemptedContracts.Contains(contract.ContractGuid))
                 {
-                    Debug.Log($"{LogPrefix} skip '{contract.Title}': takeover roll already attempted for this offer instance.");
                     continue;
                 }
 
-                Debug.Log($"{LogPrefix} evaluating '{contract.Title}': nearExpiry={nearExpiry}, exceededOfferAge={exceededOfferAge}.");
                 attemptedContracts.Add(contract.ContractGuid);
 
                 Agency winner = SelectWinningAgency(contract);
                 if (winner == null)
                 {
-                    Debug.Log($"{LogPrefix} no agency won takeover roll for '{contract.Title}'.");
                     continue;
                 }
 
@@ -266,7 +428,7 @@ namespace OtherAgencies
             }
         }
 
-        private static bool IsNearExpiry(Contract contract, double now)
+        private bool IsNearExpiry(Contract contract, double now)
         {
             if (contract.DateExpire <= 0d)
             {
@@ -274,10 +436,10 @@ namespace OtherAgencies
             }
 
             double remaining = contract.DateExpire - now;
-            return remaining > 0d && remaining <= NearExpiryThresholdSeconds;
+            return remaining > 0d && remaining <= nearExpiryThresholdSeconds;
         }
 
-        private static bool HasExceededOfferAge(Contract contract, double now)
+        private bool HasExceededOfferAge(Contract contract, double now)
         {
             if (contract.TimeExpiry <= 0d || contract.DateExpire <= 0d)
             {
@@ -285,7 +447,7 @@ namespace OtherAgencies
             }
 
             double offeredAt = contract.DateExpire - contract.TimeExpiry;
-            return (now - offeredAt) >= OfferAgeThresholdSeconds;
+            return (now - offeredAt) >= offerAgeThresholdSeconds;
         }
 
         private Agency SelectWinningAgency(Contract contract)
@@ -297,22 +459,17 @@ namespace OtherAgencies
 
             if (matchingAgencies.Count == 0)
             {
-                Debug.Log($"{LogPrefix} no matching agencies for '{contract.Title}'.");
                 return null;
             }
-
-            Debug.Log($"{LogPrefix} '{contract.Title}' matched {matchingAgencies.Count} agencies.");
 
             foreach (Agency agency in matchingAgencies)
             {
                 float relevance = GetContractRelevance(contract, agency);
-                float chance = Mathf.Clamp(agency.Aggression * relevance, 0.08f, 0.30f);
+                float chance = Mathf.Clamp(agency.Aggression * relevance, minTakeoverChance, maxTakeoverChance);
                 float roll = UnityEngine.Random.value;
-                Debug.Log($"{LogPrefix} roll '{contract.Title}' vs {agency.Name}: chance={chance:0.00}, roll={roll:0.00}.");
 
                 if (roll <= chance)
                 {
-                    Debug.Log($"{LogPrefix} winner for '{contract.Title}' is {agency.Name}.");
                     return agency;
                 }
             }
@@ -329,7 +486,6 @@ namespace OtherAgencies
         {
             if (!TryRemoveOfferedContract(contract))
             {
-                Debug.LogWarning($"{LogPrefix} failed to decline contract '{contract?.Title ?? "<null>"}'; skipping takeover.");
                 return;
             }
 
@@ -352,60 +508,69 @@ namespace OtherAgencies
 
             bool declined = contract.Decline();
             bool removed = contract.ContractState != Contract.State.Offered;
-            Debug.Log($"{LogPrefix} decline result for '{contract.Title}': declined={declined}, state={contract.ContractState}.");
             return removed || declined;
         }
 
-        private static bool IsLaunchAndOrbitContract(Contract contract)
+        private bool IsLaunchAndOrbitContract(Contract contract)
         {
-            return ContainsAnyText(contract, "launch", "orbit", "sub-orbital", "satellite", "first launch");
+            return MatchesPreferenceKeywords(contract, "launch_orbit");
         }
 
-        private static bool IsSatelliteAndCommsContract(Contract contract)
+        private bool IsSatelliteAndCommsContract(Contract contract)
         {
-            return ContainsAnyText(contract, "satellite", "relay", "antenna", "comms", "commnet");
+            return MatchesPreferenceKeywords(contract, "satellite_comms");
         }
 
-        private static bool IsMunOrMinmusContract(Contract contract)
+        private bool IsMunOrMinmusContract(Contract contract)
         {
-            return ContainsAnyText(contract, "mun", "minmus");
+            return MatchesPreferenceKeywords(contract, "mun_minmus");
         }
 
-        private static bool IsDunaLateGameContract(Contract contract)
+        private bool IsDunaLateGameContract(Contract contract)
         {
-            return Planetarium.GetUniversalTime() >= LateGameStartSeconds
-                && ContainsAnyText(contract, "duna", "interplanetary", "transfer window");
+            return Planetarium.GetUniversalTime() >= lateGameStartSeconds
+                && MatchesPreferenceKeywords(contract, "duna_late_game");
         }
 
-        private static bool IsScienceContract(Contract contract)
+        private bool IsScienceContract(Contract contract)
         {
-            return ContainsAnyText(contract, "science", "experiment", "temperature", "crew report", "goo", "materials bay");
+            return MatchesPreferenceKeywords(contract, "science");
         }
 
-        private static bool IsPartTestContract(Contract contract)
+        private bool IsPartTestContract(Contract contract)
         {
-            return ContainsAnyText(contract, "test", "engine", "part", "altitude", "activate");
+            return MatchesPreferenceKeywords(contract, "part_test");
         }
 
-        private static bool IsExplorationContract(Contract contract)
+        private bool IsExplorationContract(Contract contract)
         {
-            return ContainsAnyText(contract, "explore", "flyby", "first", "discover", "reach");
+            return MatchesPreferenceKeywords(contract, "exploration");
         }
 
-        private static bool IsOuterPlanetsEndGameContract(Contract contract)
+        private bool IsOuterPlanetsEndGameContract(Contract contract)
         {
-            return Planetarium.GetUniversalTime() >= EndGameStartSeconds
-                && ContainsAnyText(contract, "jool", "eeloo", "outer", "tylo", "vall", "bop", "pol");
+            return Planetarium.GetUniversalTime() >= endGameStartSeconds
+                && MatchesPreferenceKeywords(contract, "outer_planets_end_game");
         }
 
-        private static bool IsRescueAndTransportContract(Contract contract)
+        private bool IsRescueAndTransportContract(Contract contract)
         {
-            return ContainsAnyText(contract, "rescue", "passenger", "tourist", "crew", "transport");
+            return MatchesPreferenceKeywords(contract, "rescue_transport");
         }
 
-        private static bool IsUrgentContract(Contract contract)
+        private bool IsUrgentContract(Contract contract)
         {
             return IsNearExpiry(contract, Planetarium.GetUniversalTime());
+        }
+
+        private bool MatchesPreferenceKeywords(Contract contract, string preferenceId)
+        {
+            if (!preferenceKeywords.TryGetValue(preferenceId, out string[] keywords))
+            {
+                return false;
+            }
+
+            return ContainsAnyText(contract, keywords);
         }
 
         private static bool ContainsAnyText(Contract contract, params string[] values)
