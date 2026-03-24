@@ -90,4 +90,4 @@ A lightweight KSP mod mechanic where ignored offered contracts can expire becaus
 ## Design boundaries
 
 This mod intentionally does **not** simulate real agencies, missions, or progression.
-It only applies timed pressure to offered contracts.
+It only applies timed pressure to offered contracts. For now.
