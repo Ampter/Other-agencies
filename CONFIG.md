@@ -189,10 +189,6 @@ When a rival takes a contract:
 5. Console log line:
    - `[OtherAgencies] <AgencyName> took '<ContractTitle>'. State is now <State>.`
 
-## Logging
-
-Only successful takeovers are logged by this mod.
-
 
 ## Defaults and Fallbacks
 
