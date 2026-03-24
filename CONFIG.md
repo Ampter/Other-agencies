@@ -2,36 +2,6 @@
 
 This page documents everything currently configurable in `agencies.cfg`.
 
-## Implemented Changes (2026-03-24)
-
-This section documents the implementation updates now reflected in this config system and runtime behavior.
-
-- Contract takeover state handling:
-- Moved to `contract.Decline()` so takeover consequences match manual decline behavior.
-
-- Rival attempt pacing and stability:
-- Added one-attempt-per-offer-instance tracking via `ContractGuid`.
-- Continued timed checks (not every frame), now fully configurable via `SETTINGS`.
-
-- Logging:
-- Reduced to one console line only when a rival successfully takes a contract.
-
-- Config file loading:
-- Added runtime load from `GameData/Other-Agencies/agencies.cfg` with fallback `GameData/OtherAgencies/agencies.cfg`.
-- If config is missing/invalid/no valid agencies, built-in defaults are used.
-
-- New configurable settings in `SETTINGS`:
-- `checkIntervalSeconds`
-- `nearExpiryThresholdKerbinDays`
-- `offerAgeThresholdKerbinDays`
-- `minTakeoverChance`
-- `maxTakeoverChance`
-- `lateGameStartKerbinYears`
-- `endGameStartKerbinYears`
-
-- New keyword override mechanism:
-- Added `PREFERENCE` nodes (`id`, `keywords`) to override built-in text matching per preference bucket.
-
 ## Config File Location
 
 The mod loads this file at runtime:
