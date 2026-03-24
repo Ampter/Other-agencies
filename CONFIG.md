@@ -1,4 +1,4 @@
-# Other Agencies Configuration Wiki
+# Other Agencies Configuration
 
 This page documents everything currently configurable in `agencies.cfg`.
 
@@ -31,10 +31,6 @@ This section documents the implementation updates now reflected in this config s
 
 - New keyword override mechanism:
 - Added `PREFERENCE` nodes (`id`, `keywords`) to override built-in text matching per preference bucket.
-
-- Packaging/deployment support:
-- `create.sh` now packages `agencies.cfg` into the mod folder.
-- `put.sh` deploys packaged content into KSP `GameData/Other-Agencies`.
 
 ## Config File Location
 

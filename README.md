@@ -83,7 +83,7 @@ A lightweight KSP mod mechanic where ignored offered contracts can expire becaus
 - late-game and end-game unlock times
 - Added configurable `PREFERENCE` keyword overrides.
 - Reduced runtime logging to takeover events only.
-- Updated packaging so `create.sh` also ships `agencies.cfg`.
+- Updated packaging so `create.sh` also ships `agencies.cfg` and creates `Other_agencies.zip`.
 - Added `put.sh` deploy helper to copy the packaged mod into KSP `GameData`.
 - Added and expanded `CONFIG.md` as the full configuration wiki.
 

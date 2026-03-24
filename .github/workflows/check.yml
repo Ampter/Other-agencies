@@ -31,3 +31,4 @@ jobs:
           set -euo pipefail
           test -f "Other_agencies/GameData/Other-Agencies/Plugins/OtherAgencies.dll"
           test -f "Other_agencies/GameData/Other-Agencies/agencies.cfg"
+          test -f "Other_agencies.zip"

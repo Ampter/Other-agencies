@@ -58,6 +58,7 @@ dkms.conf
 src/bin/
 src/obj/
 Other_agencies/
+Other_agencies.zip
 put.sh
 
 # --- IDE & System ---
