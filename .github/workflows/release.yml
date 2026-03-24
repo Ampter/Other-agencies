@@ -1,0 +1,57 @@
+name: Build and Release
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build package with create.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./create.sh
+          ./create.sh
+
+      - name: Set release metadata and create zip archive
+        id: package
+        shell: pwsh
+        run: |
+          $mergeSha = "${{ github.event.pull_request.merge_commit_sha || github.sha }}"
+          $shortSha = $mergeSha.Substring(0, 7)
+          $tagName = "merge-pr${{ github.event.pull_request.number }}-$shortSha"
+          $zipName = "Other-agencies-$tagName.zip"
+          if (Test-Path $zipName) {
+            Remove-Item $zipName -Force
+          }
+          Compress-Archive -Path "Other_agencies" -DestinationPath $zipName
+          "tag_name=$tagName" >> $env:GITHUB_OUTPUT
+          "zip_name=$zipName" >> $env:GITHUB_OUTPUT
+
+      - name: Create release and upload asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.package.outputs.tag_name }}
+          target_commitish: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          name: PR #${{ github.event.pull_request.number }} merge
+          files: ${{ steps.package.outputs.zip_name }}
+          generate_release_notes: true
