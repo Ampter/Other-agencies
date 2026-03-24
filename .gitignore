@@ -58,6 +58,7 @@ dkms.conf
 src/bin/
 src/obj/
 Other_agencies/
+put.sh
 
 # --- IDE & System ---
 .vs/
