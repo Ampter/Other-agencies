@@ -1,6 +1,7 @@
 #if KSP_STUBS
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace Contracts
 {
@@ -133,6 +134,62 @@ public static class Planetarium
     public static double GetUniversalTime()
     {
         return 0d;
+    }
+}
+
+public static class KSPUtil
+{
+    public static string ApplicationRootPath => "/";
+}
+
+public class ConfigNode
+{
+    private readonly Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<ConfigNode>> nodes = new Dictionary<string, List<ConfigNode>>(StringComparer.OrdinalIgnoreCase);
+
+    public static ConfigNode Load(string fileFullName)
+    {
+        if (!File.Exists(fileFullName))
+        {
+            return null;
+        }
+
+        return new ConfigNode();
+    }
+
+    public bool HasNode(string name)
+    {
+        return !string.IsNullOrEmpty(name) && nodes.ContainsKey(name) && nodes[name].Count > 0;
+    }
+
+    public ConfigNode GetNode(string name)
+    {
+        if (!HasNode(name))
+        {
+            return null;
+        }
+
+        return nodes[name][0];
+    }
+
+    public ConfigNode[] GetNodes(string name)
+    {
+        if (!HasNode(name))
+        {
+            return new ConfigNode[0];
+        }
+
+        return nodes[name].ToArray();
+    }
+
+    public string GetValue(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+
+        return values.TryGetValue(name, out string value) ? value : null;
     }
 }
 #endif

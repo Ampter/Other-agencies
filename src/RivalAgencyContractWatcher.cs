@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using Contracts;
 using UnityEngine;
@@ -33,77 +35,170 @@ namespace OtherAgencies
         private const double NearExpiryThresholdSeconds = 0.5d * KerbinDaySeconds;
         private const double OfferAgeThresholdSeconds = 3d * KerbinDaySeconds;
         private const string LogPrefix = "[OtherAgencies]";
+        private const string ConfigFileName = "agencies.cfg";
+        private const string ConfigRootNodeName = "OTHER_AGENCIES";
+        private const string AgencyNodeName = "AGENCY";
 
         private readonly List<Agency> agencies = new List<Agency>();
+        private readonly Dictionary<string, Func<Contract, bool>> preferenceMap =
+            new Dictionary<string, Func<Contract, bool>>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<Guid> attemptedContracts = new HashSet<Guid>();
         private double nextCheckTime;
 
         private void Start()
         {
             agencies.Clear();
-
-            agencies.Add(new Agency(
-                "KerbalX Industries",
-                IsLaunchAndOrbitContract,
-                0.40f,
-                "KerbalX has successfully placed a satellite before you."));
-
-            agencies.Add(new Agency(
-                "OrbitCorp",
-                IsSatelliteAndCommsContract,
-                0.48f,
-                "OrbitCorp optimized this network deployment before you."));
-
-            agencies.Add(new Agency(
-                "Munar Exploration Group",
-                IsMunOrMinmusContract,
-                0.38f,
-                "Munar Exploration Group planted their flag first."));
-
-            agencies.Add(new Agency(
-                "Duna Initiative",
-                IsDunaLateGameContract,
-                0.50f,
-                "Duna Initiative launched an elite interplanetary campaign ahead of you."));
-
-            agencies.Add(new Agency(
-                "Kerbin Science Union",
-                IsScienceContract,
-                0.28f,
-                "Kerbin Science Union published the experiment results before your team."));
-
-            agencies.Add(new Agency(
-                "Industrial Assembly Co.",
-                IsPartTestContract,
-                0.42f,
-                "Industrial Assembly Co. validated the design before your engineers."));
-
-            agencies.Add(new Agency(
-                "Deep Space Surveyors",
-                IsExplorationContract,
-                0.36f,
-                "Deep Space Surveyors logged that exploration milestone first."));
-
-            agencies.Add(new Agency(
-                "Outer Planets Coalition",
-                IsOuterPlanetsEndGameContract,
-                0.50f,
-                "Outer Planets Coalition quietly secured this outer-system objective."));
-
-            agencies.Add(new Agency(
-                "Kerbin Logistics Network",
-                IsRescueAndTransportContract,
-                0.34f,
-                "Kerbin Logistics Network handled this crew operation before you."));
-
-            agencies.Add(new Agency(
-                "SpeedRun Aerospace",
-                IsUrgentContract,
-                0.46f,
-                "SpeedRun Aerospace sniped the deadline before your launch window."));
+            RegisterBuiltInPreferences();
+            LoadAgenciesConfigOrDefault();
 
             nextCheckTime = Planetarium.GetUniversalTime() + CheckIntervalSeconds;
             Debug.Log($"{LogPrefix} initialized with {agencies.Count} agencies.");
+        }
+
+        private void RegisterBuiltInPreferences()
+        {
+            preferenceMap.Clear();
+            preferenceMap["launch_orbit"] = IsLaunchAndOrbitContract;
+            preferenceMap["satellite_comms"] = IsSatelliteAndCommsContract;
+            preferenceMap["mun_minmus"] = IsMunOrMinmusContract;
+            preferenceMap["duna_late_game"] = IsDunaLateGameContract;
+            preferenceMap["science"] = IsScienceContract;
+            preferenceMap["part_test"] = IsPartTestContract;
+            preferenceMap["exploration"] = IsExplorationContract;
+            preferenceMap["outer_planets_end_game"] = IsOuterPlanetsEndGameContract;
+            preferenceMap["rescue_transport"] = IsRescueAndTransportContract;
+            preferenceMap["urgent"] = IsUrgentContract;
+        }
+
+        private void LoadAgenciesConfigOrDefault()
+        {
+            agencies.Clear();
+
+            string configPath = ResolveAgencyConfigPath();
+            if (string.IsNullOrEmpty(configPath) || !File.Exists(configPath))
+            {
+                Debug.LogWarning($"{LogPrefix} agencies.cfg not found, using built-in defaults.");
+                LoadDefaultAgencies();
+                return;
+            }
+
+            ConfigNode root = ConfigNode.Load(configPath);
+            if (root == null)
+            {
+                Debug.LogWarning($"{LogPrefix} could not parse agencies.cfg at '{configPath}', using built-in defaults.");
+                LoadDefaultAgencies();
+                return;
+            }
+
+            ConfigNode config = root.HasNode(ConfigRootNodeName) ? root.GetNode(ConfigRootNodeName) : root;
+            ConfigNode[] agencyNodes = config.GetNodes(AgencyNodeName);
+            if (agencyNodes == null || agencyNodes.Length == 0)
+            {
+                Debug.LogWarning($"{LogPrefix} no AGENCY nodes in agencies.cfg, using built-in defaults.");
+                LoadDefaultAgencies();
+                return;
+            }
+
+            foreach (ConfigNode agencyNode in agencyNodes)
+            {
+                TryAddAgencyFromNode(agencyNode);
+            }
+
+            if (agencies.Count == 0)
+            {
+                Debug.LogWarning($"{LogPrefix} agencies.cfg loaded zero valid agencies, using built-in defaults.");
+                LoadDefaultAgencies();
+                return;
+            }
+
+            Debug.Log($"{LogPrefix} loaded {agencies.Count} agencies from '{configPath}'.");
+        }
+
+        private static string ResolveAgencyConfigPath()
+        {
+            string root = KSPUtil.ApplicationRootPath;
+            if (string.IsNullOrEmpty(root))
+            {
+                return string.Empty;
+            }
+
+            string hyphenPath = Path.Combine(root, "GameData", "Other-Agencies", ConfigFileName);
+            if (File.Exists(hyphenPath))
+            {
+                return hyphenPath;
+            }
+
+            string fallbackPath = Path.Combine(root, "GameData", "OtherAgencies", ConfigFileName);
+            if (File.Exists(fallbackPath))
+            {
+                return fallbackPath;
+            }
+
+            return hyphenPath;
+        }
+
+        private void TryAddAgencyFromNode(ConfigNode node)
+        {
+            if (node == null)
+            {
+                return;
+            }
+
+            string name = (node.GetValue("name") ?? string.Empty).Trim();
+            string preferenceId = (node.GetValue("preference") ?? string.Empty).Trim();
+            string aggressionRaw = (node.GetValue("aggression") ?? string.Empty).Trim();
+            string completionFlavor = node.GetValue("completionFlavor") ?? string.Empty;
+
+            if (string.IsNullOrEmpty(name))
+            {
+                Debug.LogWarning($"{LogPrefix} skipping AGENCY with missing 'name'.");
+                return;
+            }
+
+            if (!preferenceMap.TryGetValue(preferenceId, out Func<Contract, bool> preference))
+            {
+                Debug.LogWarning($"{LogPrefix} skipping '{name}': unknown preference '{preferenceId}'.");
+                return;
+            }
+
+            if (!float.TryParse(aggressionRaw, NumberStyles.Float, CultureInfo.InvariantCulture, out float aggression))
+            {
+                aggression = 0.35f;
+                Debug.LogWarning($"{LogPrefix} agency '{name}' has invalid aggression '{aggressionRaw}', using {aggression:0.00}.");
+            }
+
+            agencies.Add(new Agency(name, preference, aggression, completionFlavor));
+        }
+
+        private void LoadDefaultAgencies()
+        {
+            AddAgency("KerbalX Industries", "launch_orbit", 0.40f, "KerbalX has successfully placed a satellite before you.");
+            AddAgency("OrbitCorp", "satellite_comms", 0.48f, "OrbitCorp optimized this network deployment before you.");
+            AddAgency("Munar Exploration Group", "mun_minmus", 0.38f, "Munar Exploration Group planted their flag first.");
+            AddAgency("Duna Initiative", "duna_late_game", 0.50f, "Duna Initiative launched an elite interplanetary campaign ahead of you.");
+            AddAgency("Kerbin Science Union", "science", 0.28f, "Kerbin Science Union published the experiment results before your team.");
+            AddAgency("Industrial Assembly Co.", "part_test", 0.42f, "Industrial Assembly Co. validated the design before your engineers.");
+            AddAgency("Deep Space Surveyors", "exploration", 0.36f, "Deep Space Surveyors logged that exploration milestone first.");
+            AddAgency("Outer Planets Coalition", "outer_planets_end_game", 0.50f, "Outer Planets Coalition quietly secured this outer-system objective.");
+            AddAgency("Kerbin Logistics Network", "rescue_transport", 0.34f, "Kerbin Logistics Network handled this crew operation before you.");
+            AddAgency("SpeedRun Aerospace", "urgent", 0.46f, "SpeedRun Aerospace sniped the deadline before your launch window.");
+            Debug.Log($"{LogPrefix} loaded built-in default agencies.");
+        }
+
+        private void AddAgency(string name, string preferenceId, float aggression, string completionFlavor)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return;
+            }
+
+            if (!preferenceMap.TryGetValue(preferenceId, out Func<Contract, bool> preference))
+            {
+                Debug.LogWarning($"{LogPrefix} could not add agency '{name}' with unknown preference '{preferenceId}'.");
+                return;
+            }
+
+            agencies.Add(new Agency(name, preference, aggression, completionFlavor));
         }
 
         private void FixedUpdate()
