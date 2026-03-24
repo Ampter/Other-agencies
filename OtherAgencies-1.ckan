@@ -1,0 +1,29 @@
+{
+  "spec_version": 1,
+  "identifier": "OtherAgencies",
+  "name": "Other-agencies",
+  "abstract": "A lightweight KSP contract mod where ignored offered contracts can expire because a rival agency took them.",
+  "author": "Ampter",
+  "license": "GPL-3.0",
+  "version": "1",
+  "release_status": "testing",
+  "ksp_version": "1.12",
+  "download": "https://github.com/Ampter/Other-agencies/releases/download/1/Other_agencies.zip",
+  "download_size": 11398,
+  "download_hash": {
+    "sha256": "4b99556de42bd6df53fce3fb154c8d634f6334072b7b7ebcf1ab8bffd7fcd393"
+  },
+  "resources": {
+    "homepage": "https://github.com/Ampter/Other-agencies",
+    "repository": "https://github.com/Ampter/Other-agencies",
+    "bugtracker": "https://github.com/Ampter/Other-agencies/issues",
+    "manual": "https://github.com/Ampter/Other-agencies/blob/main/CONFIG.md"
+  },
+  "install": [
+    {
+      "file": "Other_agencies/GameData/Other-Agencies",
+      "install_to": "GameData"
+    }
+  ],
+  "description": "Other-agencies adds time pressure to stock offered contracts by letting rival agencies claim them before the player does. It watches offered contracts on a configurable interval, applies agency preference and aggression rules, declines sniped contracts through the normal stock path, and loads settings from GameData/Other-Agencies/agencies.cfg."
+}
