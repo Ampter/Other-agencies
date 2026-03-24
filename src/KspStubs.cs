@@ -8,10 +8,16 @@ namespace Contracts
     {
         public enum State
         {
+            Generated,
             Offered,
+            OfferExpired,
+            Declined,
+            Cancelled,
             Active,
             Completed,
-            Expired
+            DeadlineExpired,
+            Failed,
+            Withdrawn
         }
 
         public State ContractState { get; private set; } = State.Offered;
@@ -20,9 +26,9 @@ namespace Contracts
         public string Title { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
 
-        public void SetState(State state)
+        public void Withdraw()
         {
-            ContractState = state;
+            ContractState = State.Withdrawn;
         }
     }
 

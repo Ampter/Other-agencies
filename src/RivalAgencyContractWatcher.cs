@@ -202,7 +202,7 @@ namespace OtherAgencies
 
         private static void ExpireContract(Contract contract, Agency winner)
         {
-            contract.SetState(Contract.State.Expired);
+            contract.Withdraw();
 
             string contractMessage = $"{winner.Name} completed: {contract.Title}";
             ScreenMessages.PostScreenMessage(contractMessage, 6f, ScreenMessageStyle.UPPER_CENTER);

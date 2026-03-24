@@ -58,6 +58,7 @@ dkms.conf
 # Ignores the bin and obj folders inside /src
 src/bin/
 src/obj/
+Other_agencies_*/
 
 # --- IDE & System ---
 .vs/
