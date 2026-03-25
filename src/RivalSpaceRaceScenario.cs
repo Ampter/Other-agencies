@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using ContractConfigurator;
 using Contracts;
 using UnityEngine;
 
@@ -125,6 +126,8 @@ namespace OtherAgencies
             {
                 return;
             }
+
+            SyncContractConfiguratorContracts();
 
             double now = Planetarium.GetUniversalTime();
             foreach (KeyValuePair<string, RivalSpaceRacePersistentState> pair in raceStates)
@@ -296,6 +299,7 @@ namespace OtherAgencies
             state.Status = RivalSpaceRaceStatus.Won;
             state.FinishedAtUniversalTime = Planetarium.GetUniversalTime();
             PostRaceMessage(definition.CompletedMessage);
+            TryCompleteRaceContract(definition);
             Debug.Log($"{LogPrefix} Player won space race '{raceId}'.");
         }
 
@@ -314,7 +318,9 @@ namespace OtherAgencies
 
             state.Status = RivalSpaceRaceStatus.Lost;
             state.FinishedAtUniversalTime = Planetarium.GetUniversalTime();
+            ApplyFailureSciencePenalty(definition);
             PostRaceMessage(definition.FailedMessage);
+            TryFailRaceContract(definition);
             Debug.Log($"{LogPrefix} Rival won space race '{raceId}'.");
         }
 
@@ -419,6 +425,58 @@ namespace OtherAgencies
             }
 
             EnsureRaceStateEntries();
+        }
+
+        private void SyncContractConfiguratorContracts()
+        {
+            if (config == null || ContractSystem.Instance == null || ContractSystem.Instance.Contracts == null)
+            {
+                return;
+            }
+
+            foreach (SpaceRaceDefinition definition in config.SpaceRaces)
+            {
+                if (definition == null || !definition.Enabled)
+                {
+                    continue;
+                }
+
+                RivalSpaceRacePersistentState state = GetOrCreateState(definition.Id);
+                ConfiguredContract contract = FindRaceContract(definition);
+                if (contract == null)
+                {
+                    if (state.Status == RivalSpaceRaceStatus.Offered)
+                    {
+                        DeclineRace(definition.Id);
+                    }
+
+                    continue;
+                }
+
+                if (contract.ContractState == Contract.State.Offered)
+                {
+                    MarkRaceOffered(definition.Id);
+                }
+                else if (contract.ContractState == Contract.State.Active)
+                {
+                    AcceptRace(definition.Id);
+                }
+                else if (contract.ContractState == Contract.State.Completed && state.Status == RivalSpaceRaceStatus.Active)
+                {
+                    state.Status = RivalSpaceRaceStatus.Won;
+                    state.FinishedAtUniversalTime = Planetarium.GetUniversalTime();
+                    PostRaceMessage(definition.CompletedMessage);
+                    Debug.Log($"{LogPrefix} Player won space race '{definition.Id}' via Contract Configurator completion.");
+                }
+                else if (contract.ContractState == Contract.State.Failed && state.Status == RivalSpaceRaceStatus.Active)
+                {
+                    state.Status = RivalSpaceRaceStatus.Lost;
+                    state.FinishedAtUniversalTime = Planetarium.GetUniversalTime();
+                    ApplyFailureSciencePenalty(definition);
+                    PostRaceMessage(definition.FailedMessage);
+                    Debug.Log($"{LogPrefix} Rival won space race '{definition.Id}' via Contract Configurator failure.");
+                }
+            }
         }
 
         private void EnsureRaceStateEntries()
@@ -691,6 +749,60 @@ namespace OtherAgencies
 
             return ContractSystem.Instance.ContractsFinished.Count(
                 contract => contract != null && contract.ContractState == Contract.State.Completed);
+        }
+
+        private static void ApplyFailureSciencePenalty(SpaceRaceDefinition definition)
+        {
+            if (definition == null || definition.FailureSciencePenalty <= 0f || ResearchAndDevelopment.Instance == null)
+            {
+                return;
+            }
+
+            float currentScience = ResearchAndDevelopment.Instance.Science;
+            float appliedPenalty = Math.Min(currentScience, definition.FailureSciencePenalty);
+            if (appliedPenalty > 0f)
+            {
+                ResearchAndDevelopment.Instance.AddScience(-appliedPenalty, TransactionReasons.ContractPenalty);
+            }
+        }
+
+        private ConfiguredContract FindRaceContract(SpaceRaceDefinition definition)
+        {
+            if (definition == null
+                || string.IsNullOrEmpty(definition.ContractConfiguratorTypeName)
+                || ContractSystem.Instance == null
+                || ContractSystem.Instance.Contracts == null)
+            {
+                return null;
+            }
+
+            return ContractSystem.Instance.Contracts
+                .OfType<ConfiguredContract>()
+                .FirstOrDefault(contract =>
+                    contract != null
+                    && contract.contractType != null
+                    && string.Equals(
+                        contract.contractType.name,
+                        definition.ContractConfiguratorTypeName,
+                        StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void TryCompleteRaceContract(SpaceRaceDefinition definition)
+        {
+            ConfiguredContract contract = FindRaceContract(definition);
+            if (contract != null && contract.ContractState == Contract.State.Active)
+            {
+                contract.Complete();
+            }
+        }
+
+        private void TryFailRaceContract(SpaceRaceDefinition definition)
+        {
+            ConfiguredContract contract = FindRaceContract(definition);
+            if (contract != null && contract.ContractState == Contract.State.Active)
+            {
+                contract.Fail();
+            }
         }
 
         private SpaceRaceStageDefinition GetCurrentStage(SpaceRaceDefinition definition, RivalSpaceRacePersistentState state)

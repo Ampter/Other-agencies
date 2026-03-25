@@ -31,6 +31,7 @@ SOURCE_AGENCIES_CFG="$SCRIPT_DIR/agencies.cfg"
 SOURCE_README="$SCRIPT_DIR/README.md"
 SOURCE_CONFIG_DOC="$SCRIPT_DIR/CONFIG.md"
 SOURCE_CRAFTS_DIR="$SCRIPT_DIR/crafts"
+SOURCE_GAMEDATA_DIR="$SCRIPT_DIR/gamedata/Other-Agencies"
 OUTPUT_AGENCIES_CFG="$MOD_DIR/agencies.cfg"
 OUTPUT_README="$ROOT_DIR/README.md"
 OUTPUT_CONFIG_DOC="$ROOT_DIR/CONFIG.md"
@@ -120,7 +121,7 @@ if [[ ! -f "$SOURCE_README" || ! -f "$SOURCE_CONFIG_DOC" ]]; then
   exit 1
 fi
 
-echo "[1/7] Building mod DLL..."
+echo "[1/8] Building mod DLL..."
 dotnet build "$PROJECT_FILE" -c "$BUILD_CONFIG"
 
 if [[ ! -f "$OUTPUT_DLL" ]]; then
@@ -128,27 +129,32 @@ if [[ ! -f "$OUTPUT_DLL" ]]; then
   exit 1
 fi
 
-echo "[2/7] Resetting package output..."
+echo "[2/8] Resetting package output..."
 rm -rf "$ROOT_DIR" "$ZIP_FILE"
 mkdir -p "$PLUGINS_DIR"
 
-echo "[3/7] Copying DLL into package..."
+echo "[3/8] Copying bundled GameData assets..."
+if [[ -d "$SOURCE_GAMEDATA_DIR" ]]; then
+  cp -a "$SOURCE_GAMEDATA_DIR/." "$MOD_DIR/"
+fi
+
+echo "[4/8] Copying DLL into package..."
 cp -f "$OUTPUT_DLL" "$PLUGINS_DIR/OtherAgencies.dll"
 
-echo "[4/7] Copying config and docs..."
+echo "[5/8] Copying config and docs..."
 cp -f "$SOURCE_AGENCIES_CFG" "$OUTPUT_AGENCIES_CFG"
 cp -f "$SOURCE_README" "$OUTPUT_README"
 cp -f "$SOURCE_CONFIG_DOC" "$OUTPUT_CONFIG_DOC"
 
-echo "[5/7] Copying craft templates..."
+echo "[6/8] Copying craft templates..."
 copy_crafts "$SOURCE_CRAFTS_DIR/VAB" "$OUTPUT_VAB_DIR"
 copy_crafts "$SOURCE_CRAFTS_DIR/SPH" "$OUTPUT_SPH_DIR"
 warn_missing_expected_crafts
 
-echo "[6/7] Creating zip archive..."
+echo "[7/8] Creating zip archive..."
 create_zip_archive
 
-echo "[7/7] Package ready."
+echo "[8/8] Package ready."
 echo "Mod directory: $MOD_DIR"
 echo "Craft directory: $SHIPS_DIR"
 echo "Zip archive: $ZIP_FILE"

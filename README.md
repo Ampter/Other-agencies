@@ -2,10 +2,12 @@
 
 `Other-agencies` started as a rival-contract sniping mod and now also supports configurable, contract-driven space races.
 
+Space race offers now use `Contract Configurator`, with a dedicated `Space Race Challenge` agent that reuses the stock World First Milestones artwork.
+
 ## What It Does
 
 - Rival agencies can still steal ignored offered contracts based on preference buckets and aggression.
-- Space races are now offered in Mission Control as challenge contracts.
+- Space races are now offered in Mission Control as Contract Configurator challenge contracts.
 - Accepting a race starts a persistent rival program that gains:
   - passive funds
   - passive science
@@ -24,7 +26,7 @@ After your first launch and at least one completed contract, Mission Control can
 
 - `World First Challenge: Beat KerbalX to Orbit`
 
-Accepting it gives support funds up front and starts KerbalX Industries on a probabilistic early-career orbital program. Winning completes the contract. Losing fails it and applies a heavy setback.
+The offer comes from `Space Race Challenge`, but uses the same agency image as stock World First Milestones. Accepting it gives support funds up front and starts KerbalX Industries on a probabilistic early-career orbital program. Winning completes the contract. Losing fails it and applies a heavy setback.
 
 ## Craft Templates
 
@@ -52,6 +54,11 @@ The zip now includes:
 - `README.md`
 - `CONFIG.md`
 - any `.craft` files found under `crafts/VAB/` or `crafts/SPH/`
+
+## Dependencies
+
+- `Contract Configurator` is now required for space race offers.
+- The packaged mod includes the `Space Race Challenge` CC contract and agent config.
 
 ## Configuration
 

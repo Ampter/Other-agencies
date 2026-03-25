@@ -2,6 +2,8 @@
 
 This file documents the current `agencies.cfg` schema for both rival contract stealing and the new contract-driven space races.
 
+Space race offers are now surfaced through `Contract Configurator`. The packaged mod ships one CC contract type for the first race and an agent named `Space Race Challenge` that reuses the stock World First logo.
+
 ## Config Location
 
 The mod loads:
@@ -156,6 +158,9 @@ Core keys:
 - `offerAfterUniversalTime`
 - `offerAfterCompletedContracts`
 - `requireFirstLaunchReached`
+- `contractConfiguratorType`
+  - The CC `CONTRACT_TYPE` name that should drive this race offer
+  - Default built-in first race: `OA_FirstCrewedOrbitChallenge`
 
 Contract presentation/rewards:
 
@@ -185,6 +190,11 @@ Stolen-contract reward model:
 - `contractCompletionFundsMultiplier`
 
 Each race needs at least one `RESEARCH_STEP` and one `STAGE`.
+
+Notes:
+
+- The shipped first race uses Contract Configurator for the offer UI and stock contract completion path.
+- If you add a brand new race in `agencies.cfg`, you should also add a matching CC `CONTRACT_TYPE` config with the same `contractConfiguratorType` name so it can appear in Mission Control.
 
 ## RESEARCH_STEP
 

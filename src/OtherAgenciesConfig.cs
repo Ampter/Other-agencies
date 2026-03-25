@@ -86,6 +86,7 @@ namespace OtherAgencies
         public double OfferAfterUniversalTime { get; set; }
         public int OfferAfterCompletedContracts { get; set; }
         public bool RequireFirstLaunchReached { get; set; } = true;
+        public string ContractConfiguratorTypeName { get; set; } = string.Empty;
         public string ContractTitle { get; set; } = string.Empty;
         public string ContractSynopsis { get; set; } = string.Empty;
         public string ContractDescription { get; set; } = string.Empty;
@@ -308,6 +309,7 @@ namespace OtherAgencies
                 OfferAfterUniversalTime = 0d,
                 OfferAfterCompletedContracts = 1,
                 RequireFirstLaunchReached = true,
+                ContractConfiguratorTypeName = "OA_FirstCrewedOrbitChallenge",
                 ContractTitle = "World First Challenge: Beat KerbalX to Orbit",
                 ContractSynopsis = "KerbalX Industries has challenged your program to put a Kerbal into orbit first.",
                 ContractDescription =
@@ -685,6 +687,7 @@ namespace OtherAgencies
                 OfferAfterUniversalTime = ReadDouble(node, "offerAfterUniversalTime", 0d, 0d, double.MaxValue),
                 OfferAfterCompletedContracts = ReadInt(node, "offerAfterCompletedContracts", 0, 0, int.MaxValue),
                 RequireFirstLaunchReached = ReadBool(node, "requireFirstLaunchReached", true),
+                ContractConfiguratorTypeName = ReadString(node, "contractConfiguratorType", $"OA_{id}"),
                 ContractTitle = ReadString(node, "contractTitle", $"World First Challenge: {id}"),
                 ContractSynopsis = ReadString(node, "contractSynopsis", "A rival agency is challenging your program."),
                 ContractDescription = ReadString(node, "contractDescription", "A rival agency is racing your program toward a milestone."),
