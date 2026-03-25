@@ -10,19 +10,11 @@
 
   <PropertyGroup>
     <KspInstallDir>/home/slavek/.local/share/Steam/steamapps/common/Kerbal Space Program</KspInstallDir>
-    
     <KspManagedDir>$(KspInstallDir)/KSP_Data/Managed</KspManagedDir>
     <KspPluginsDir>$(KspInstallDir)/GameData/OtherAgencies/Plugins</KspPluginsDir>
-    
-    <HasKspManagedAssemblies Condition="Exists('$(KspManagedDir)/Assembly-CSharp.dll')">true</HasKspManagedAssemblies>
-    <HasKspManagedAssemblies Condition="'$(HasKspManagedAssemblies)' == ''">false</HasKspManagedAssemblies>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(HasKspManagedAssemblies)' != 'true'">
-    <DefineConstants>$(DefineConstants);KSP_STUBS</DefineConstants>
-  </PropertyGroup>
-
-  <ItemGroup Condition="'$(HasKspManagedAssemblies)' == 'true'">
+  <ItemGroup>
     <Reference Include="Assembly-CSharp">
       <HintPath>$(KspManagedDir)/Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
@@ -35,13 +27,5 @@
       <HintPath>$(KspManagedDir)/UnityEngine.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="Contracts">
-      <HintPath>$(KspManagedDir)/Contracts.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
   </ItemGroup>
-
-  <Target Name="ShowKspReferenceHint" BeforeTargets="Build" Condition="'$(HasKspManagedAssemblies)' != 'true'">
-    <Message Importance="High" Text="KSP DLLs not found at $(KspManagedDir). Building with local KSP stubs." />
-  </Target>
 </Project>
