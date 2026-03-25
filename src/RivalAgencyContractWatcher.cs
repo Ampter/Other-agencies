@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
 using System.Linq;
 using Contracts;
 using UnityEngine;
@@ -10,38 +8,47 @@ namespace OtherAgencies
 {
     internal sealed class Agency
     {
+        private readonly List<Func<Contract, bool>> preferences;
+
+        public Agency(
+            string name,
+            IEnumerable<string> preferenceIds,
+            IEnumerable<Func<Contract, bool>> preferenceChecks,
+            float aggression,
+            string completionFlavor)
+        {
+            Name = name ?? string.Empty;
+            PreferenceIds = (preferenceIds ?? Array.Empty<string>())
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            preferences = (preferenceChecks ?? Enumerable.Empty<Func<Contract, bool>>())
+                .Where(check => check != null)
+                .ToList();
+            Aggression = Mathf.Clamp01(aggression);
+            CompletionFlavor = completionFlavor ?? string.Empty;
+        }
+
         public string Name { get; }
-        public Func<Contract, bool> Preference { get; }
+        public IReadOnlyList<string> PreferenceIds { get; }
         public float Aggression { get; }
         public string CompletionFlavor { get; }
 
-        public Agency(string name, Func<Contract, bool> preference, float aggression, string completionFlavor)
+        public bool MatchesContract(Contract contract)
         {
-            Name = name;
-            Preference = preference;
-            Aggression = Mathf.Clamp01(aggression);
-            CompletionFlavor = completionFlavor;
+            return preferences.Any(preference => preference(contract));
+        }
+
+        public int GetMatchCount(Contract contract)
+        {
+            return preferences.Count(preference => preference(contract));
         }
     }
 
     [KSPAddon(KSPAddon.Startup.SpaceCentre, false)]
     public sealed class RivalAgencyContractWatcher : MonoBehaviour
     {
-        private const double KerbinDaySeconds = 6d * 60d * 60d;
-        private const double KerbinYearSeconds = 426d * KerbinDaySeconds;
-        private const double DefaultCheckIntervalSeconds = 5d;
-        private const double DefaultNearExpiryThresholdKerbinDays = 0.5d;
-        private const double DefaultOfferAgeThresholdKerbinDays = 3d;
-        private const float DefaultMinTakeoverChance = 0.08f;
-        private const float DefaultMaxTakeoverChance = 0.30f;
-        private const double DefaultLateGameStartKerbinYears = 3d;
-        private const double DefaultEndGameStartKerbinYears = 6d;
         private const string LogPrefix = "[OtherAgencies]";
-        private const string ConfigFileName = "agencies.cfg";
-        private const string ConfigRootNodeName = "OTHER_AGENCIES";
-        private const string AgencyNodeName = "AGENCY";
-        private const string SettingsNodeName = "SETTINGS";
-        private const string PreferenceNodeName = "PREFERENCE";
 
         private readonly List<Agency> agencies = new List<Agency>();
         private readonly Dictionary<string, Func<Contract, bool>> preferenceMap =
@@ -49,45 +56,46 @@ namespace OtherAgencies
         private readonly Dictionary<string, string[]> preferenceKeywords =
             new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<Guid> attemptedContracts = new HashSet<Guid>();
-        private double checkIntervalSeconds;
-        private double nearExpiryThresholdSeconds;
-        private double offerAgeThresholdSeconds;
-        private float minTakeoverChance;
-        private float maxTakeoverChance;
-        private double lateGameStartSeconds;
-        private double endGameStartSeconds;
+
+        private ContractWatcherSettings settings = new ContractWatcherSettings();
         private double nextCheckTime;
 
         private void Start()
         {
-            ResetConfigToDefaults();
             RegisterBuiltInPreferences();
-            LoadAgenciesConfigOrDefault();
-
-            nextCheckTime = Planetarium.GetUniversalTime() + checkIntervalSeconds;
+            LoadConfig();
+            nextCheckTime = Planetarium.GetUniversalTime() + settings.CheckIntervalSeconds;
         }
 
-        private void ResetConfigToDefaults()
+        private void FixedUpdate()
         {
-            checkIntervalSeconds = DefaultCheckIntervalSeconds;
-            nearExpiryThresholdSeconds = DefaultNearExpiryThresholdKerbinDays * KerbinDaySeconds;
-            offerAgeThresholdSeconds = DefaultOfferAgeThresholdKerbinDays * KerbinDaySeconds;
-            minTakeoverChance = DefaultMinTakeoverChance;
-            maxTakeoverChance = DefaultMaxTakeoverChance;
-            lateGameStartSeconds = DefaultLateGameStartKerbinYears * KerbinYearSeconds;
-            endGameStartSeconds = DefaultEndGameStartKerbinYears * KerbinYearSeconds;
+            double now = Planetarium.GetUniversalTime();
+            if (now < nextCheckTime)
+            {
+                return;
+            }
 
+            nextCheckTime = now + settings.CheckIntervalSeconds;
+            EvaluateOfferedContracts(now);
+        }
+
+        private void LoadConfig()
+        {
+            agencies.Clear();
             preferenceKeywords.Clear();
-            preferenceKeywords["launch_orbit"] = new[] { "launch", "orbit", "sub-orbital", "satellite", "first launch" };
-            preferenceKeywords["satellite_comms"] = new[] { "satellite", "relay", "antenna", "comms", "commnet" };
-            preferenceKeywords["mun_minmus"] = new[] { "mun", "minmus" };
-            preferenceKeywords["duna_late_game"] = new[] { "duna", "interplanetary", "transfer window" };
-            preferenceKeywords["science"] = new[] { "science", "experiment", "temperature", "crew report", "goo", "materials bay" };
-            preferenceKeywords["part_test"] = new[] { "test", "engine", "part", "altitude", "activate" };
-            preferenceKeywords["exploration"] = new[] { "explore", "flyby", "first", "discover", "reach" };
-            preferenceKeywords["outer_planets_end_game"] = new[] { "jool", "eeloo", "outer", "tylo", "vall", "bop", "pol" };
-            preferenceKeywords["rescue_transport"] = new[] { "rescue", "passenger", "tourist", "crew", "transport" };
-            preferenceKeywords["urgent"] = Array.Empty<string>();
+
+            OtherAgenciesConfig config = OtherAgenciesConfigLoader.Load();
+            settings = config.WatcherSettings ?? new ContractWatcherSettings();
+
+            foreach (KeyValuePair<string, string[]> pair in config.PreferenceKeywords)
+            {
+                preferenceKeywords[pair.Key] = pair.Value ?? Array.Empty<string>();
+            }
+
+            foreach (AgencyConfigDefinition agencyDefinition in config.Agencies)
+            {
+                TryAddAgency(agencyDefinition);
+            }
         }
 
         private void RegisterBuiltInPreferences()
@@ -105,280 +113,38 @@ namespace OtherAgencies
             preferenceMap["urgent"] = IsUrgentContract;
         }
 
-        private void LoadAgenciesConfigOrDefault()
+        private void TryAddAgency(AgencyConfigDefinition definition)
         {
-            agencies.Clear();
-
-            string configPath = ResolveAgencyConfigPath();
-            if (string.IsNullOrEmpty(configPath) || !File.Exists(configPath))
-            {
-                LoadDefaultAgencies();
-                return;
-            }
-
-            ConfigNode root = ConfigNode.Load(configPath);
-            if (root == null)
-            {
-                LoadDefaultAgencies();
-                return;
-            }
-
-            ConfigNode config = root.HasNode(ConfigRootNodeName) ? root.GetNode(ConfigRootNodeName) : root;
-            ApplySettings(config);
-            ApplyPreferenceOverrides(config);
-
-            ConfigNode[] agencyNodes = config.GetNodes(AgencyNodeName);
-            if (agencyNodes == null || agencyNodes.Length == 0)
-            {
-                LoadDefaultAgencies();
-                return;
-            }
-
-            foreach (ConfigNode agencyNode in agencyNodes)
-            {
-                TryAddAgencyFromNode(agencyNode);
-            }
-
-            if (agencies.Count == 0)
-            {
-                LoadDefaultAgencies();
-                return;
-            }
-        }
-
-        private void ApplySettings(ConfigNode config)
-        {
-            if (config == null || !config.HasNode(SettingsNodeName))
+            if (definition == null || string.IsNullOrEmpty(definition.Name))
             {
                 return;
             }
 
-            ConfigNode settings = config.GetNode(SettingsNodeName);
-            if (settings == null)
+            List<string> resolvedIds = new List<string>();
+            List<Func<Contract, bool>> checks = new List<Func<Contract, bool>>();
+            foreach (string preferenceId in definition.PreferenceIds)
             {
-                return;
-            }
-
-            checkIntervalSeconds = ReadDouble(settings, "checkIntervalSeconds", checkIntervalSeconds, 0.2d, 300d);
-
-            double nearExpiryThresholdKerbinDays = ReadDouble(
-                settings,
-                "nearExpiryThresholdKerbinDays",
-                nearExpiryThresholdSeconds / KerbinDaySeconds,
-                0d,
-                1000d);
-            nearExpiryThresholdSeconds = nearExpiryThresholdKerbinDays * KerbinDaySeconds;
-
-            double offerAgeThresholdKerbinDays = ReadDouble(
-                settings,
-                "offerAgeThresholdKerbinDays",
-                offerAgeThresholdSeconds / KerbinDaySeconds,
-                0d,
-                1000d);
-            offerAgeThresholdSeconds = offerAgeThresholdKerbinDays * KerbinDaySeconds;
-
-            minTakeoverChance = ReadFloat(settings, "minTakeoverChance", minTakeoverChance, 0f, 1f);
-            maxTakeoverChance = ReadFloat(settings, "maxTakeoverChance", maxTakeoverChance, 0f, 1f);
-            if (maxTakeoverChance < minTakeoverChance)
-            {
-                float swap = minTakeoverChance;
-                minTakeoverChance = maxTakeoverChance;
-                maxTakeoverChance = swap;
-            }
-
-            double lateGameStartKerbinYears = ReadDouble(
-                settings,
-                "lateGameStartKerbinYears",
-                lateGameStartSeconds / KerbinYearSeconds,
-                0d,
-                1000d);
-            lateGameStartSeconds = lateGameStartKerbinYears * KerbinYearSeconds;
-
-            double endGameStartKerbinYears = ReadDouble(
-                settings,
-                "endGameStartKerbinYears",
-                endGameStartSeconds / KerbinYearSeconds,
-                0d,
-                1000d);
-            endGameStartSeconds = endGameStartKerbinYears * KerbinYearSeconds;
-        }
-
-        private void ApplyPreferenceOverrides(ConfigNode config)
-        {
-            if (config == null)
-            {
-                return;
-            }
-
-            ConfigNode[] nodes = config.GetNodes(PreferenceNodeName);
-            if (nodes == null || nodes.Length == 0)
-            {
-                return;
-            }
-
-            foreach (ConfigNode node in nodes)
-            {
-                if (node == null)
+                if (string.IsNullOrEmpty(preferenceId)
+                    || !preferenceMap.TryGetValue(preferenceId, out Func<Contract, bool> check))
                 {
                     continue;
                 }
 
-                string id = (node.GetValue("id") ?? string.Empty).Trim();
-                string keywordsRaw = node.GetValue("keywords") ?? string.Empty;
-                if (string.IsNullOrEmpty(id) || string.IsNullOrWhiteSpace(keywordsRaw))
-                {
-                    continue;
-                }
-
-                string[] keywords = SplitKeywords(keywordsRaw);
-                if (keywords.Length == 0)
-                {
-                    continue;
-                }
-
-                preferenceKeywords[id] = keywords;
-            }
-        }
-
-        private static string[] SplitKeywords(string raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                return Array.Empty<string>();
+                resolvedIds.Add(preferenceId);
+                checks.Add(check);
             }
 
-            return raw
-                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(value => value.Trim())
-                .Where(value => !string.IsNullOrEmpty(value))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-        }
-
-        private static double ReadDouble(ConfigNode node, string key, double defaultValue, double min, double max)
-        {
-            if (node == null || string.IsNullOrEmpty(key))
-            {
-                return defaultValue;
-            }
-
-            string raw = node.GetValue(key);
-            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
-            {
-                return defaultValue;
-            }
-
-            return Math.Max(min, Math.Min(max, value));
-        }
-
-        private static float ReadFloat(ConfigNode node, string key, float defaultValue, float min, float max)
-        {
-            if (node == null || string.IsNullOrEmpty(key))
-            {
-                return defaultValue;
-            }
-
-            string raw = node.GetValue(key);
-            if (!float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out float value))
-            {
-                return defaultValue;
-            }
-
-            return Mathf.Clamp(value, min, max);
-        }
-
-        private static string ResolveAgencyConfigPath()
-        {
-            string root = KSPUtil.ApplicationRootPath;
-            if (string.IsNullOrEmpty(root))
-            {
-                return string.Empty;
-            }
-
-            string hyphenPath = Path.Combine(root, "GameData", "Other-Agencies", ConfigFileName);
-            if (File.Exists(hyphenPath))
-            {
-                return hyphenPath;
-            }
-
-            string fallbackPath = Path.Combine(root, "GameData", "OtherAgencies", ConfigFileName);
-            if (File.Exists(fallbackPath))
-            {
-                return fallbackPath;
-            }
-
-            return hyphenPath;
-        }
-
-        private void TryAddAgencyFromNode(ConfigNode node)
-        {
-            if (node == null)
+            if (checks.Count == 0)
             {
                 return;
             }
 
-            string name = (node.GetValue("name") ?? string.Empty).Trim();
-            string preferenceId = (node.GetValue("preference") ?? string.Empty).Trim();
-            string aggressionRaw = (node.GetValue("aggression") ?? string.Empty).Trim();
-            string completionFlavor = node.GetValue("completionFlavor") ?? string.Empty;
-
-            if (string.IsNullOrEmpty(name))
-            {
-                return;
-            }
-
-            if (!preferenceMap.TryGetValue(preferenceId, out Func<Contract, bool> preference))
-            {
-                return;
-            }
-
-            if (!float.TryParse(aggressionRaw, NumberStyles.Float, CultureInfo.InvariantCulture, out float aggression))
-            {
-                aggression = 0.35f;
-            }
-
-            agencies.Add(new Agency(name, preference, aggression, completionFlavor));
-        }
-
-        private void LoadDefaultAgencies()
-        {
-            AddAgency("KerbalX Industries", "launch_orbit", 0.40f, "KerbalX has successfully placed a satellite before you.");
-            AddAgency("OrbitCorp", "satellite_comms", 0.48f, "OrbitCorp optimized this network deployment before you.");
-            AddAgency("Munar Exploration Group", "mun_minmus", 0.38f, "Munar Exploration Group planted their flag first.");
-            AddAgency("Duna Initiative", "duna_late_game", 0.50f, "Duna Initiative launched an elite interplanetary campaign ahead of you.");
-            AddAgency("Kerbin Science Union", "science", 0.28f, "Kerbin Science Union published the experiment results before your team.");
-            AddAgency("Industrial Assembly Co.", "part_test", 0.42f, "Industrial Assembly Co. validated the design before your engineers.");
-            AddAgency("Deep Space Surveyors", "exploration", 0.36f, "Deep Space Surveyors logged that exploration milestone first.");
-            AddAgency("Outer Planets Coalition", "outer_planets_end_game", 0.50f, "Outer Planets Coalition quietly secured this outer-system objective.");
-            AddAgency("Kerbin Logistics Network", "rescue_transport", 0.34f, "Kerbin Logistics Network handled this crew operation before you.");
-            AddAgency("SpeedRun Aerospace", "urgent", 0.46f, "SpeedRun Aerospace sniped the deadline before your launch window.");
-        }
-
-        private void AddAgency(string name, string preferenceId, float aggression, string completionFlavor)
-        {
-            if (string.IsNullOrEmpty(name))
-            {
-                return;
-            }
-
-            if (!preferenceMap.TryGetValue(preferenceId, out Func<Contract, bool> preference))
-            {
-                return;
-            }
-
-            agencies.Add(new Agency(name, preference, aggression, completionFlavor));
-        }
-
-        private void FixedUpdate()
-        {
-            double now = Planetarium.GetUniversalTime();
-            if (now < nextCheckTime)
-            {
-                return;
-            }
-
-            nextCheckTime = now + checkIntervalSeconds;
-            EvaluateOfferedContracts(now);
+            agencies.Add(new Agency(
+                definition.Name,
+                resolvedIds,
+                checks,
+                definition.Aggression,
+                definition.CompletionFlavor));
         }
 
         private void EvaluateOfferedContracts(double now)
@@ -405,7 +171,6 @@ namespace OtherAgencies
             {
                 bool nearExpiry = IsNearExpiry(contract, now);
                 bool exceededOfferAge = HasExceededOfferAge(contract, now);
-
                 if (!nearExpiry && !exceededOfferAge)
                 {
                     continue;
@@ -417,14 +182,18 @@ namespace OtherAgencies
                 }
 
                 attemptedContracts.Add(contract.ContractGuid);
-
                 Agency winner = SelectWinningAgency(contract);
                 if (winner == null)
                 {
                     continue;
                 }
 
-                ExpireContract(contract, winner);
+                if (!ExpireContract(contract, winner))
+                {
+                    continue;
+                }
+
+                RivalSpaceRaceScenario.Instance?.NotifyContractStolen(winner.Name, contract);
             }
         }
 
@@ -436,7 +205,7 @@ namespace OtherAgencies
             }
 
             double remaining = contract.DateExpire - now;
-            return remaining > 0d && remaining <= nearExpiryThresholdSeconds;
+            return remaining > 0d && remaining <= settings.NearExpiryThresholdSeconds;
         }
 
         private bool HasExceededOfferAge(Contract contract, double now)
@@ -447,13 +216,13 @@ namespace OtherAgencies
             }
 
             double offeredAt = contract.DateExpire - contract.TimeExpiry;
-            return (now - offeredAt) >= offerAgeThresholdSeconds;
+            return (now - offeredAt) >= settings.OfferAgeThresholdSeconds;
         }
 
         private Agency SelectWinningAgency(Contract contract)
         {
             List<Agency> matchingAgencies = agencies
-                .Where(agency => agency != null && agency.Preference(contract))
+                .Where(agency => agency != null && agency.MatchesContract(contract))
                 .OrderBy(_ => UnityEngine.Random.value)
                 .ToList();
 
@@ -465,10 +234,12 @@ namespace OtherAgencies
             foreach (Agency agency in matchingAgencies)
             {
                 float relevance = GetContractRelevance(contract, agency);
-                float chance = Mathf.Clamp(agency.Aggression * relevance, minTakeoverChance, maxTakeoverChance);
-                float roll = UnityEngine.Random.value;
+                float chance = Mathf.Clamp(
+                    agency.Aggression * relevance,
+                    settings.MinTakeoverChance,
+                    settings.MaxTakeoverChance);
 
-                if (roll <= chance)
+                if (UnityEngine.Random.value <= chance)
                 {
                     return agency;
                 }
@@ -479,14 +250,20 @@ namespace OtherAgencies
 
         private static float GetContractRelevance(Contract contract, Agency agency)
         {
-            return agency.Preference(contract) ? 1f : 0.7f;
+            int matches = agency.GetMatchCount(contract);
+            if (matches <= 0)
+            {
+                return 0.7f;
+            }
+
+            return Mathf.Clamp(1f + ((matches - 1) * 0.12f), 1f, 1.3f);
         }
 
-        private static void ExpireContract(Contract contract, Agency winner)
+        private static bool ExpireContract(Contract contract, Agency winner)
         {
             if (!TryRemoveOfferedContract(contract))
             {
-                return;
+                return false;
             }
 
             string contractMessage = $"{winner.Name} completed: {contract.Title}";
@@ -497,6 +274,8 @@ namespace OtherAgencies
             {
                 ScreenMessages.PostScreenMessage(winner.CompletionFlavor, 6f, ScreenMessageStyle.UPPER_CENTER);
             }
+
+            return true;
         }
 
         private static bool TryRemoveOfferedContract(Contract contract)
@@ -528,7 +307,7 @@ namespace OtherAgencies
 
         private bool IsDunaLateGameContract(Contract contract)
         {
-            return Planetarium.GetUniversalTime() >= lateGameStartSeconds
+            return Planetarium.GetUniversalTime() >= settings.LateGameStartSeconds
                 && MatchesPreferenceKeywords(contract, "duna_late_game");
         }
 
@@ -549,7 +328,7 @@ namespace OtherAgencies
 
         private bool IsOuterPlanetsEndGameContract(Contract contract)
         {
-            return Planetarium.GetUniversalTime() >= endGameStartSeconds
+            return Planetarium.GetUniversalTime() >= settings.EndGameStartSeconds
                 && MatchesPreferenceKeywords(contract, "outer_planets_end_game");
         }
 
@@ -565,12 +344,8 @@ namespace OtherAgencies
 
         private bool MatchesPreferenceKeywords(Contract contract, string preferenceId)
         {
-            if (!preferenceKeywords.TryGetValue(preferenceId, out string[] keywords))
-            {
-                return false;
-            }
-
-            return ContainsAnyText(contract, keywords);
+            return preferenceKeywords.TryGetValue(preferenceId, out string[] keywords)
+                && ContainsAnyText(contract, keywords);
         }
 
         private static bool ContainsAnyText(Contract contract, params string[] values)
