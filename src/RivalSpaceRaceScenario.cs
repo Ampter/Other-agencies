@@ -234,6 +234,10 @@ namespace OtherAgencies
             if (state.Status == RivalSpaceRaceStatus.Pending)
             {
                 state.Status = RivalSpaceRaceStatus.Offered;
+                if (TryGetRaceDefinition(raceId, out SpaceRaceDefinition definition) && definition != null)
+                {
+                    LogRaceEvent(definition, state, "Challenge contract offered in Mission Control.");
+                }
             }
         }
 
@@ -248,6 +252,10 @@ namespace OtherAgencies
             // "Decline = nothing" means the race should remain eligible for a later offer.
             state.Status = RivalSpaceRaceStatus.Pending;
             state.FinishedAtUniversalTime = 0d;
+            if (TryGetRaceDefinition(raceId, out SpaceRaceDefinition definition) && definition != null)
+            {
+                LogRaceEvent(definition, state, "Challenge contract declined or expired; race returned to pending.");
+            }
         }
 
         public void AcceptRace(string raceId)
@@ -280,7 +288,7 @@ namespace OtherAgencies
             state.NextPlayerCheckTime = now + config.RaceSettings.PlayerProgressCheckIntervalSeconds;
 
             PostRaceMessage(definition.AcceptedMessage);
-            Debug.Log($"{LogPrefix} Accepted race '{raceId}'.");
+            LogRaceEvent(definition, state, "Challenge accepted. Rival simulation started.");
         }
 
         public void MarkPlayerWon(string raceId)
@@ -300,7 +308,7 @@ namespace OtherAgencies
             state.FinishedAtUniversalTime = Planetarium.GetUniversalTime();
             PostRaceMessage(definition.CompletedMessage);
             TryCompleteRaceContract(definition);
-            Debug.Log($"{LogPrefix} Player won space race '{raceId}'.");
+            LogRaceEvent(definition, state, "Player reached the goal first.");
         }
 
         public void MarkRivalWon(string raceId)
@@ -321,7 +329,7 @@ namespace OtherAgencies
             ApplyFailureSciencePenalty(definition);
             PostRaceMessage(definition.FailedMessage);
             TryFailRaceContract(definition);
-            Debug.Log($"{LogPrefix} Rival won space race '{raceId}'.");
+            LogRaceEvent(definition, state, "Rival reached the goal first.");
         }
 
         internal RivalSpaceRaceStatus GetRaceStatus(string raceId)
@@ -398,6 +406,10 @@ namespace OtherAgencies
                 state.FundsBalance += fundsReward;
                 state.StolenContracts += 1;
                 state.ContractProgress += progressReward;
+                LogRaceEvent(
+                    definition,
+                    state,
+                    $"Stole contract '{contract.Title}' for +{scienceReward:0.0} science, +{fundsReward:0} funds, +{progressReward:0.0} progress.");
 
                 if (config.RaceSettings.AnnounceContractRewards)
                 {
@@ -466,7 +478,7 @@ namespace OtherAgencies
                     state.Status = RivalSpaceRaceStatus.Won;
                     state.FinishedAtUniversalTime = Planetarium.GetUniversalTime();
                     PostRaceMessage(definition.CompletedMessage);
-                    Debug.Log($"{LogPrefix} Player won space race '{definition.Id}' via Contract Configurator completion.");
+                    LogRaceEvent(definition, state, "Contract Configurator marked the race contract complete.");
                 }
                 else if (contract.ContractState == Contract.State.Failed && state.Status == RivalSpaceRaceStatus.Active)
                 {
@@ -474,7 +486,7 @@ namespace OtherAgencies
                     state.FinishedAtUniversalTime = Planetarium.GetUniversalTime();
                     ApplyFailureSciencePenalty(definition);
                     PostRaceMessage(definition.FailedMessage);
-                    Debug.Log($"{LogPrefix} Rival won space race '{definition.Id}' via Contract Configurator failure.");
+                    LogRaceEvent(definition, state, "Contract Configurator marked the race contract failed.");
                 }
             }
         }
@@ -559,6 +571,7 @@ namespace OtherAgencies
                 {
                     state.Status = RivalSpaceRaceStatus.Won;
                     state.FinishedAtUniversalTime = now;
+                    LogRaceEvent(definition, state, "Player had already completed the goal before the race could start.");
                 }
             }
         }
@@ -625,6 +638,10 @@ namespace OtherAgencies
 
                 state.ScienceBalance -= nextResearch.ScienceCost;
                 state.UnlockedResearchIds.Add(nextResearch.Id);
+                LogRaceEvent(
+                    definition,
+                    state,
+                    $"Unlocked research '{nextResearch.DisplayName}' for {nextResearch.ScienceCost:0.0} science.");
 
                 if (config.RaceSettings.AnnounceResearchUnlocks)
                 {
@@ -671,6 +688,10 @@ namespace OtherAgencies
 
             state.FundsBalance = Math.Max(0d, state.FundsBalance - currentStage.FundsCost);
             state.CurrentStageIndex++;
+            LogRaceEvent(
+                definition,
+                state,
+                $"Completed stage '{currentStage.Title}' after spending {currentStage.FundsCost:0} funds.");
 
             if (config.RaceSettings.AnnounceStageChanges)
             {
@@ -763,6 +784,7 @@ namespace OtherAgencies
             if (appliedPenalty > 0f)
             {
                 ResearchAndDevelopment.Instance.AddScience(-appliedPenalty, TransactionReasons.ContractPenalty);
+                Debug.Log($"{LogPrefix} Applied space-race science penalty: -{appliedPenalty:0.0} science.");
             }
         }
 
@@ -792,6 +814,7 @@ namespace OtherAgencies
             ConfiguredContract contract = FindRaceContract(definition);
             if (contract != null && contract.ContractState == Contract.State.Active)
             {
+                Debug.Log($"{LogPrefix} Completing Contract Configurator race contract '{definition.ContractConfiguratorTypeName}'.");
                 contract.Complete();
             }
         }
@@ -801,8 +824,26 @@ namespace OtherAgencies
             ConfiguredContract contract = FindRaceContract(definition);
             if (contract != null && contract.ContractState == Contract.State.Active)
             {
+                Debug.Log($"{LogPrefix} Failing Contract Configurator race contract '{definition.ContractConfiguratorTypeName}'.");
                 contract.Fail();
             }
+        }
+
+        private void LogRaceEvent(
+            SpaceRaceDefinition definition,
+            RivalSpaceRacePersistentState state,
+            string message)
+        {
+            if (definition == null || state == null)
+            {
+                return;
+            }
+
+            string currentStage = GetCurrentStage(definition, state)?.Title ?? "Complete";
+            Debug.Log(
+                $"{LogPrefix} [SpaceRace:{definition.Id}] {message} " +
+                $"Status={state.Status}, Stage={currentStage}, Funds={state.FundsBalance:0}, " +
+                $"Science={state.ScienceBalance:0.0}, Contracts={state.StolenContracts}, Progress={state.ContractProgress:0.0}");
         }
 
         private SpaceRaceStageDefinition GetCurrentStage(SpaceRaceDefinition definition, RivalSpaceRacePersistentState state)

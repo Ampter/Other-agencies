@@ -3,6 +3,7 @@
 This file documents the current `agencies.cfg` schema for both rival contract stealing and the new contract-driven space races.
 
 Space race offers are now surfaced through `Contract Configurator`. The packaged mod ships one CC contract type for the first race and an agent named `Space Race Challenge` that reuses the stock World First logo.
+The shipped first offer currently expires after `2` Kerbin days.
 
 ## Config Location
 
@@ -195,6 +196,7 @@ Notes:
 
 - The shipped first race uses Contract Configurator for the offer UI and stock contract completion path.
 - If you add a brand new race in `agencies.cfg`, you should also add a matching CC `CONTRACT_TYPE` config with the same `contractConfiguratorType` name so it can appear in Mission Control.
+- Runtime space-race events are logged to `KSP.log`, including offers, accepts, stolen-contract rewards, research unlocks, stage completions, and final outcomes.
 
 ## RESEARCH_STEP
 

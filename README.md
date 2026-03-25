@@ -26,7 +26,7 @@ After your first launch and at least one completed contract, Mission Control can
 
 - `World First Challenge: Beat KerbalX to Orbit`
 
-The offer comes from `Space Race Challenge`, but uses the same agency image as stock World First Milestones. Accepting it gives support funds up front and starts KerbalX Industries on a probabilistic early-career orbital program. Winning completes the contract. Losing fails it and applies a heavy setback.
+The offer comes from `Space Race Challenge`, but uses the same agency image as stock World First Milestones. It now expires after 2 Kerbin days. Accepting it gives support funds up front and starts KerbalX Industries on a probabilistic early-career orbital program. Winning completes the contract. Losing fails it and applies a heavy setback.
 
 ## Craft Templates
 
@@ -59,6 +59,7 @@ The zip now includes:
 
 - `Contract Configurator` is now required for space race offers.
 - The packaged mod includes the `Space Race Challenge` CC contract and agent config.
+- Space race state changes and rival progress now write detailed entries to the KSP log.
 
 ## Configuration
 
