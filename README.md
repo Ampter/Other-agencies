@@ -2,16 +2,6 @@
 
 A lightweight KSP mod mechanic where ignored offered contracts can expire because a rival agency took them.
 
-## Current behavior
-
-- Polls `ContractSystem` on a timed interval (default `5s`, configurable).
-- Filters only `Offered` contracts.
-- Evaluates contracts when near expiry or older than an offered-age threshold.
-- Tries each offered contract only once per offer instance (`ContractGuid`).
-- Uses agency preference matching + bounded probability rolls.
-- On rival takeover, removes the contract through `contract.Decline()` (same penalty path as manual decline).
-- Displays screen messages with agency + contract title, plus optional agency flavor text.
-- Writes one console log line only when a takeover succeeds.
 
 ## Configuration
 

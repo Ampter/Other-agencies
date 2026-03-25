@@ -19,8 +19,6 @@ PACKAGE_NAME="Other_agencies"
 ROOT_DIR="$SCRIPT_DIR/$PACKAGE_NAME"
 MOD_DIR="$ROOT_DIR/GameData/Other-Agencies"
 PLUGINS_DIR="$MOD_DIR/Plugins"
-PLUGIN_DATA_DIR="$MOD_DIR/PluginData"
-LOCALIZATION_DIR="$MOD_DIR/Localization"
 ZIP_FILE="$SCRIPT_DIR/${PACKAGE_NAME}.zip"
 OUTPUT_DLL="$SCRIPT_DIR/src/bin/$BUILD_CONFIG/$BUILD_TFM/OtherAgencies.dll"
 SOURCE_AGENCIES_CFG="$SCRIPT_DIR/agencies.cfg"
@@ -84,7 +82,7 @@ fi
 
 echo "[2/5] Resetting package output..."
 rm -rf "$ROOT_DIR" "$ZIP_FILE"
-mkdir -p "$PLUGINS_DIR" "$PLUGIN_DATA_DIR" "$LOCALIZATION_DIR"
+mkdir -p "$PLUGINS_DIR"
 
 echo "[3/5] Copying DLL into package..."
 cp -f "$OUTPUT_DLL" "$PLUGINS_DIR/OtherAgencies.dll"
