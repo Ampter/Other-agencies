@@ -4,10 +4,13 @@ set -euo pipefail
 # Build and package Other-Agencies mod artifacts.
 # Output layout:
 #   Other_agencies/
-#     GameData/
-#       Other-Agencies/
-#         Plugins/OtherAgencies.dll
-#         agencies.cfg
+#     GameData/Other-Agencies/
+#       Plugins/OtherAgencies.dll
+#       agencies.cfg
+#     Ships/VAB/*.craft
+#     Ships/SPH/*.craft
+#     README.md
+#     CONFIG.md
 #   Other_agencies.zip
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,10 +22,24 @@ PACKAGE_NAME="Other_agencies"
 ROOT_DIR="$SCRIPT_DIR/$PACKAGE_NAME"
 MOD_DIR="$ROOT_DIR/GameData/Other-Agencies"
 PLUGINS_DIR="$MOD_DIR/Plugins"
+SHIPS_DIR="$ROOT_DIR/Ships"
+OUTPUT_VAB_DIR="$SHIPS_DIR/VAB"
+OUTPUT_SPH_DIR="$SHIPS_DIR/SPH"
 ZIP_FILE="$SCRIPT_DIR/${PACKAGE_NAME}.zip"
 OUTPUT_DLL="$SCRIPT_DIR/src/bin/$BUILD_CONFIG/$BUILD_TFM/OtherAgencies.dll"
 SOURCE_AGENCIES_CFG="$SCRIPT_DIR/agencies.cfg"
+SOURCE_README="$SCRIPT_DIR/README.md"
+SOURCE_CONFIG_DOC="$SCRIPT_DIR/CONFIG.md"
+SOURCE_CRAFTS_DIR="$SCRIPT_DIR/crafts"
 OUTPUT_AGENCIES_CFG="$MOD_DIR/agencies.cfg"
+OUTPUT_README="$ROOT_DIR/README.md"
+OUTPUT_CONFIG_DOC="$ROOT_DIR/CONFIG.md"
+
+EXPECTED_VAB_CRAFTS=(
+  "OA_KerbalX_Sounding.craft"
+  "OA_KerbalX_Suborbital.craft"
+  "OA_KerbalX_Orbiter.craft"
+)
 
 to_native_path() {
   if command -v cygpath >/dev/null 2>&1; then
@@ -60,6 +77,34 @@ create_zip_archive() {
   exit 1
 }
 
+copy_crafts() {
+  local source_dir="$1"
+  local output_dir="$2"
+
+  if [[ ! -d "$source_dir" ]]; then
+    return
+  fi
+
+  shopt -s nullglob
+  local craft_files=("$source_dir"/*.craft)
+  shopt -u nullglob
+  if [[ ${#craft_files[@]} -eq 0 ]]; then
+    return
+  fi
+
+  mkdir -p "$output_dir"
+  cp -f "${craft_files[@]}" "$output_dir/"
+}
+
+warn_missing_expected_crafts() {
+  local craft_name=""
+  for craft_name in "${EXPECTED_VAB_CRAFTS[@]}"; do
+    if [[ ! -f "$SOURCE_CRAFTS_DIR/VAB/$craft_name" ]]; then
+      echo "Warning: expected craft missing: crafts/VAB/$craft_name" >&2
+    fi
+  done
+}
+
 if [[ ! -f "$PROJECT_FILE" ]]; then
   echo "Could not find project file: $PROJECT_FILE" >&2
   exit 1
@@ -70,7 +115,12 @@ if [[ ! -f "$SOURCE_AGENCIES_CFG" ]]; then
   exit 1
 fi
 
-echo "[1/5] Building mod DLL..."
+if [[ ! -f "$SOURCE_README" || ! -f "$SOURCE_CONFIG_DOC" ]]; then
+  echo "README.md and CONFIG.md must both exist before packaging." >&2
+  exit 1
+fi
+
+echo "[1/7] Building mod DLL..."
 dotnet build "$PROJECT_FILE" -c "$BUILD_CONFIG"
 
 if [[ ! -f "$OUTPUT_DLL" ]]; then
@@ -78,20 +128,27 @@ if [[ ! -f "$OUTPUT_DLL" ]]; then
   exit 1
 fi
 
-
-
-echo "[2/5] Resetting package output..."
+echo "[2/7] Resetting package output..."
 rm -rf "$ROOT_DIR" "$ZIP_FILE"
 mkdir -p "$PLUGINS_DIR"
 
-echo "[3/5] Copying DLL into package..."
+echo "[3/7] Copying DLL into package..."
 cp -f "$OUTPUT_DLL" "$PLUGINS_DIR/OtherAgencies.dll"
 
-echo "[4/5] Copying agencies.cfg into package..."
+echo "[4/7] Copying config and docs..."
 cp -f "$SOURCE_AGENCIES_CFG" "$OUTPUT_AGENCIES_CFG"
+cp -f "$SOURCE_README" "$OUTPUT_README"
+cp -f "$SOURCE_CONFIG_DOC" "$OUTPUT_CONFIG_DOC"
 
-echo "[5/5] Creating zip archive..."
+echo "[5/7] Copying craft templates..."
+copy_crafts "$SOURCE_CRAFTS_DIR/VAB" "$OUTPUT_VAB_DIR"
+copy_crafts "$SOURCE_CRAFTS_DIR/SPH" "$OUTPUT_SPH_DIR"
+warn_missing_expected_crafts
+
+echo "[6/7] Creating zip archive..."
 create_zip_archive
 
-echo "Done. Package directory created at: $MOD_DIR"
-echo "Done. Zip archive created at: $ZIP_FILE"
+echo "[7/7] Package ready."
+echo "Mod directory: $MOD_DIR"
+echo "Craft directory: $SHIPS_DIR"
+echo "Zip archive: $ZIP_FILE"

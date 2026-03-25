@@ -1,68 +1,73 @@
 # Other-agencies
 
-A lightweight KSP mod mechanic where ignored offered contracts can expire because a rival agency took them.
+`Other-agencies` started as a rival-contract sniping mod and now also supports configurable, contract-driven space races.
 
+## What It Does
+
+- Rival agencies can still steal ignored offered contracts based on preference buckets and aggression.
+- Space races are now offered in Mission Control as challenge contracts.
+- Accepting a race starts a persistent rival program that gains:
+  - passive funds
+  - passive science
+  - extra funds/science/progress from contracts the rival steals
+- The first shipped race is `First Crewed Orbit`:
+  - sounding rocket
+  - sub-orbital flight
+  - contract-funded expansion
+  - crewed orbit
+- If you decline the race contract, nothing happens.
+- If you accept and lose, the contract failure hits both reputation and science.
+
+## Default Race Flow
+
+After your first launch and at least one completed contract, Mission Control can offer:
+
+- `World First Challenge: Beat KerbalX to Orbit`
+
+Accepting it gives support funds up front and starts KerbalX Industries on a probabilistic early-career orbital program. Winning completes the contract. Losing fails it and applies a heavy setback.
+
+## Craft Templates
+
+The default orbital race config references these VAB craft files:
+
+- `OA_KerbalX_Sounding.craft`
+- `OA_KerbalX_Suborbital.craft`
+- `OA_KerbalX_Orbiter.craft`
+
+Place them under `crafts/VAB/` in the repo before running `create.sh`. The packager copies them into `Ships/VAB/` in the zip.
+
+The current race simulation is still abstract and probabilistic. The craft files are packaged now so the content pipeline is ready for later MechJeb-backed or scripted launch automation.
+
+## Packaging
+
+Run:
+
+```bash
+./create.sh
+```
+
+The zip now includes:
+
+- `GameData/Other-Agencies/`
+- `README.md`
+- `CONFIG.md`
+- any `.craft` files found under `crafts/VAB/` or `crafts/SPH/`
 
 ## Configuration
 
 - Main config file: `GameData/Other-Agencies/agencies.cfg`
 - Full config reference: `CONFIG.md`
-- If config is missing/invalid, built-in defaults are used.
+- Missing or invalid config falls back to built-in defaults
 
-## Rival agencies (default)
+## Rival Agencies
 
-1. **KerbalX Industries**
-   - Focus: launch + orbit contracts
-   - Behavior: prefers low-tech/simple missions first
-   - Funds/tech flavor: medium funds, early-game
-
-2. **OrbitCorp**
-   - Focus: satellite + relay networks
-   - Behavior: prefers antennas/comms/CommNet style contracts
-   - Funds/tech flavor: high funds, mid-game
-
-3. **Munar Exploration Group**
-   - Focus: Mun + Minmus contracts only
-   - Behavior: ignores everything else
-   - Funds/tech flavor: medium funds, early-mid
-
-4. **Duna Initiative**
-   - Focus: Duna + interplanetary contracts
-   - Behavior: late-game activation only
-   - Funds/tech flavor: very high funds, late-game
-
-5. **Kerbin Science Union**
-   - Focus: science experiments
-   - Behavior: prefers temperature scans, crew reports, and similar science work
-   - Funds/tech flavor: low funds, early-game
-
-6. **Industrial Assembly Co.**
-   - Focus: part testing contracts
-   - Behavior: favors “test this part/engine at altitude” style tasks
-   - Funds/tech flavor: medium funds, early-mid
-
-7. **Deep Space Surveyors**
-   - Focus: exploration + flyby contracts
-   - Behavior: prefers first-visit/first-time milestones
-   - Funds/tech flavor: medium-high funds, mid-game 
-
-8. **Outer Planets Coalition**
-   - Focus: Jool/Eeloo/outer system contracts
-   - Behavior: rare and only active late-game
-   - Funds/tech flavor: extremely high funds, endgame
-
-9. **Kerbin Logistics Network**
-   - Focus: rescue 
-   - Behavior: prefers stranded Kerbals/passenger logistics
-   - Funds/tech flavor: medium funds, early-mid
-
-10. **SpeedRun Aerospace**
-    - Focus: urgent contracts with short deadlines
-    - Behavior: aggressively targets contracts closest to expiry
-    - Funds/tech flavor: medium funds, variable tech, highly competitive
-
-
-## Design boundaries
-
-This mod intentionally does **not** simulate real agencies, missions, or progression.
-It only applies timed pressure to offered contracts. For now.
+- `KerbalX Industries`: launch/orbit, science, urgent
+- `OrbitCorp`: satellite/comms
+- `Munar Exploration Group`: Mun/Minmus
+- `Duna Initiative`: late-game Duna
+- `Kerbin Science Union`: science
+- `Industrial Assembly Co.`: part tests
+- `Deep Space Surveyors`: exploration
+- `Outer Planets Coalition`: outer planets
+- `Kerbin Logistics Network`: rescue/transport
+- `SpeedRun Aerospace`: urgent deadlines
