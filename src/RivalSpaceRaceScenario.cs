@@ -177,6 +177,11 @@ namespace OtherAgencies
                 }
 
                 RivalSpaceRacePersistentState state = GetOrCreateState(definition.Id);
+                if (state.Status == RivalSpaceRaceStatus.Declined)
+                {
+                    state.Status = RivalSpaceRaceStatus.Pending;
+                }
+
                 if (state.Status != RivalSpaceRaceStatus.Pending)
                 {
                     continue;
@@ -232,10 +237,14 @@ namespace OtherAgencies
         public void DeclineRace(string raceId)
         {
             RivalSpaceRacePersistentState state = GetOrCreateState(raceId);
-            if (state.Status == RivalSpaceRaceStatus.Offered)
+            if (state.Status != RivalSpaceRaceStatus.Offered)
             {
-                state.Status = RivalSpaceRaceStatus.Declined;
+                return;
             }
+
+            // "Decline = nothing" means the race should remain eligible for a later offer.
+            state.Status = RivalSpaceRaceStatus.Pending;
+            state.FinishedAtUniversalTime = 0d;
         }
 
         public void AcceptRace(string raceId)
@@ -476,11 +485,16 @@ namespace OtherAgencies
             foreach (RivalSpaceRacePersistentState state in raceStates.Values)
             {
                 if (state == null
-                    || state.Status != RivalSpaceRaceStatus.Pending
+                    || (state.Status != RivalSpaceRaceStatus.Pending && state.Status != RivalSpaceRaceStatus.Declined)
                     || !raceDefinitions.TryGetValue(state.RaceId, out SpaceRaceDefinition definition)
                     || definition == null)
                 {
                     continue;
+                }
+
+                if (state.Status == RivalSpaceRaceStatus.Declined)
+                {
+                    state.Status = RivalSpaceRaceStatus.Pending;
                 }
 
                 if (HasPlayerCompletedGoal(definition))
